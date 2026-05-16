@@ -931,7 +931,11 @@ export async function sshReadRemoteApiKey(config: SshConfig): Promise<string> {
 
 export async function sshGetHermesVersion(config: SshConfig): Promise<string | null> {
   try {
-    const out = await sshExec(config, `hermes --version 2>/dev/null || hermes version 2>/dev/null || echo ""`);
+    // Use the venv-probe path so the version string is the real multi-line
+    // output (Engine / Released / Python / OpenAI SDK) the Settings UI
+    // parses, not an empty string when the /usr/local/bin/hermes wrapper
+    // refuses to run as the hermes user. See buildRemoteHermesCmd notes.
+    const out = await sshExec(config, buildRemoteHermesCmd(["--version"], " 2>/dev/null"));
     return out.trim() || null;
   } catch {
     return null;
@@ -1057,9 +1061,37 @@ export async function sshListCachedSessions(
 
 // ── Doctor / diagnostics ──────────────────────────────────────────────────────
 
+// Build a remote shell command that invokes the Hermes CLI, bypassing the
+// common `/usr/local/bin/hermes` sudo-wrapper that production installs ship.
+// That wrapper does `sudo -u hermes <venv>/bin/hermes "$@"`, and the sudoers
+// policy refuses to let the hermes service user run it as itself ("Sorry,
+// user hermes is not allowed to execute … as hermes"). The wrapper writes the
+// refusal to stderr and exits non-zero, breaking `hermes doctor`,
+// `hermes update`, `hermes dump`, and `hermes --version` when called over
+// SSH as the hermes user.
+//
+// Probe the well-known venv install paths first; fall back to bare `hermes`
+// on PATH only if none of those exist, preserving the old behavior for
+// non-installer deployments.
+function buildRemoteHermesCmd(args: string[], extraShell = ""): string {
+  const candidates = [
+    "$HOME/hermes-agent/.venv/bin/hermes",
+    "$HOME/.hermes/hermes-agent/.venv/bin/hermes",
+    "/opt/hermes/hermes-agent/.venv/bin/hermes",
+  ];
+  const quotedArgs = args.map((a) => shellQuote(a)).join(" ");
+  const probe = candidates
+    .map((p) => `[ -x ${p} ] && exec ${p} ${quotedArgs}${extraShell}`)
+    .join("; ");
+  return `bash -c '${probe}; command -v hermes >/dev/null && exec hermes ${quotedArgs}${extraShell}; echo "ERR: hermes CLI not found on remote PATH or in any known venv location" >&2; exit 1'`;
+}
+
 export async function sshRunDoctor(config: SshConfig): Promise<string> {
   try {
-    const out = await sshExec(config, `hermes doctor 2>&1 || echo "hermes not found in PATH"`);
+    // `hermes doctor` writes diagnostics to stdout; redirect stderr too so
+    // any wrapper-refusal output is visible to the user rather than silently
+    // dropped.
+    const out = await sshExec(config, buildRemoteHermesCmd(["doctor"], " 2>&1"));
     return out.trim() || "No output from doctor.";
   } catch (err) {
     return `SSH doctor failed: ${(err as Error).message}`;
@@ -1067,12 +1099,12 @@ export async function sshRunDoctor(config: SshConfig): Promise<string> {
 }
 
 export async function sshRunUpdate(config: SshConfig): Promise<void> {
-  await sshExec(config, "hermes update 2>&1", undefined, 120000);
+  await sshExec(config, buildRemoteHermesCmd(["update"], " 2>&1"), undefined, 120000);
 }
 
 export async function sshRunDump(config: SshConfig): Promise<string> {
   try {
-    const out = await sshExec(config, "hermes dump 2>&1", undefined, 60000);
+    const out = await sshExec(config, buildRemoteHermesCmd(["dump"], " 2>&1"), undefined, 60000);
     return out.trim() || "No output from dump.";
   } catch (err) {
     return `SSH dump failed: ${(err as Error).message}`;
