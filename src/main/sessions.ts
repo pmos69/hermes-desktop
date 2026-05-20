@@ -118,9 +118,9 @@ export interface SearchResult {
   snippet: string;
 }
 
-function getDb(): Database.Database | null {
+function getDb(readonly = true): Database.Database | null {
   if (!existsSync(DB_PATH)) return null;
-  return new Database(DB_PATH, { readonly: true });
+  return new Database(DB_PATH, readonly ? { readonly: true } : {});
 }
 
 export function listSessions(limit = 30, offset = 0): SessionSummary[] {
@@ -272,7 +272,7 @@ export function getSessionMessages(sessionId: string): SessionMessage[] {
 }
 
 export function deleteSession(sessionId: string): void {
-  const db = getDb();
+  const db = getDb(false);
   if (!db) return;
 
   try {
