@@ -11,7 +11,7 @@ import { homedir } from "os";
 import { createConnection } from "net";
 import { getEnhancedPath, HERMES_HOME } from "./installer";
 import { stripAnsi, safeWriteFile } from "./utils";
-import { getConnectionConfig } from "./config";
+import { getApiServerKey, getConnectionConfig } from "./config";
 import http from "http";
 
 const HERMES_OFFICE_REPO = "https://github.com/fathah/hermes-office";
@@ -245,6 +245,8 @@ export function getClaw3dWsUrl(): string {
  */
 function writeClaw3dSettings(wsUrl?: string): void {
   const url = wsUrl || getSavedWsUrl();
+  // Gateway bearer token — empty string when the gateway has no API_SERVER_KEY.
+  const apiKey = getApiServerKey();
 
   // Write ~/.openclaw/claw3d/settings.json
   try {
@@ -263,7 +265,7 @@ function writeClaw3dSettings(wsUrl?: string): void {
       ...existing,
       adapter: "hermes",
       url,
-      token: "",
+      token: apiKey,
     };
     safeWriteFile(settingsPath, JSON.stringify(settings, null, 2));
   } catch {
@@ -281,7 +283,8 @@ function writeClaw3dSettings(wsUrl?: string): void {
         `HOST=127.0.0.1`,
         `NEXT_PUBLIC_GATEWAY_URL=${url}`,
         `CLAW3D_GATEWAY_URL=${url}`,
-        `CLAW3D_GATEWAY_TOKEN=`,
+        `CLAW3D_GATEWAY_TOKEN=${apiKey}`,
+        `HERMES_API_KEY=${apiKey}`,
         `HERMES_ADAPTER_PORT=18789`,
         `HERMES_MODEL=hermes`,
         `HERMES_AGENT_NAME=Hermes`,
@@ -696,6 +699,7 @@ export function startDevServer(): boolean {
     PATH: getEnhancedPath(),
     HOME: homedir(),
     TERM: "dumb",
+    HERMES_API_KEY: getApiServerKey(),
     PORT: String(port),
   };
   const node = resolveCommand("node", env.PATH);
@@ -770,11 +774,15 @@ export function startAdapter(): boolean {
 
   adapterError = "";
   adapterLogs = "";
+  // The hermes-gateway-adapter authenticates to the Hermes gateway with
+  // `Authorization: Bearer ${HERMES_API_KEY}`. Without it, a gateway that
+  // has an API_SERVER_KEY configured rejects the Office chat with HTTP 401.
   const env = {
     ...process.env,
     PATH: getEnhancedPath(),
     HOME: homedir(),
     TERM: "dumb",
+    HERMES_API_KEY: getApiServerKey(),
   };
   const node = resolveCommand("node", env.PATH);
   const adapterScript = createClaw3dScriptInvocation(
