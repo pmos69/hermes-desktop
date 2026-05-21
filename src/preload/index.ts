@@ -178,6 +178,7 @@ const hermesAPI = {
     resumeSessionId?: string,
     history?: Array<{ role: string; content: string }>,
     attachments?: Attachment[],
+    contextFolder?: string,
   ): Promise<{ response: string; sessionId?: string }> =>
     ipcRenderer.invoke(
       "send-message",
@@ -186,6 +187,7 @@ const hermesAPI = {
       resumeSessionId,
       history,
       attachments,
+      contextFolder,
     ),
 
   abortChat: (): Promise<void> => ipcRenderer.invoke("abort-chat"),

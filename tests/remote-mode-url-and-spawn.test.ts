@@ -92,6 +92,7 @@ import {
   startGateway,
   restartGateway,
   testRemoteConnection,
+  contextFolderSystemMessage,
 } from "../src/main/hermes";
 import http from "http";
 
@@ -218,5 +219,31 @@ describe("startGateway / restartGateway in remote mode", () => {
     connModeRef.mode = "ssh";
     restartGateway();
     expect(spawnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("contextFolderSystemMessage (issue #27)", () => {
+  it("returns null when no folder is set", () => {
+    expect(contextFolderSystemMessage(undefined)).toBeNull();
+    expect(contextFolderSystemMessage("")).toBeNull();
+    expect(contextFolderSystemMessage("   ")).toBeNull();
+  });
+
+  it("builds a system-role message naming the folder", () => {
+    const msg = contextFolderSystemMessage("C:\\Users\\me\\project");
+    expect(msg).not.toBeNull();
+    expect(msg!.role).toBe("system");
+    expect(msg!.content).toContain("C:\\Users\\me\\project");
+  });
+
+  it("trims surrounding whitespace from the folder path", () => {
+    const msg = contextFolderSystemMessage("  /home/me/proj  ");
+    expect(msg!.content).toContain("/home/me/proj");
+    expect(msg!.content).not.toContain("  /home/me/proj");
+  });
+
+  it("instructs the agent to use absolute paths under the folder", () => {
+    const msg = contextFolderSystemMessage("/work");
+    expect(msg!.content.toLowerCase()).toContain("absolute path");
   });
 });

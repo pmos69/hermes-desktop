@@ -1098,6 +1098,44 @@ body {
   display: block;
 }
 
+/* Context folder control (issue #27) */
+.chat-ctxfolder {
+  display: flex;
+  align-items: center;
+}
+
+.chat-ctxfolder-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  opacity: 0.6;
+  max-width: 180px;
+}
+
+.chat-ctxfolder-btn:hover {
+  opacity: 1;
+}
+
+.chat-ctxfolder-set {
+  opacity: 0.85;
+}
+
+.chat-ctxfolder-name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-ctxfolder-clear {
+  opacity: 0.45;
+  padding: 2px;
+}
+
+.chat-ctxfolder-clear:hover {
+  opacity: 1;
+}
+
 .chat-cost {
   color: var(--text-tertiary);
 }

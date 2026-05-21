@@ -275,6 +275,26 @@ export function buildUserContent(
   return [{ type: "text" as const, text: composedText }, ...imageParts];
 }
 
+/**
+ * Build the system message that scopes a conversation to a working folder
+ * (issue #27). Returns null when no folder is set (undefined / empty /
+ * whitespace) so callers can skip injection. Exported for unit testing.
+ */
+export function contextFolderSystemMessage(
+  contextFolder?: string,
+): { role: "system"; content: string } | null {
+  const folder = contextFolder?.trim();
+  if (!folder) return null;
+  return {
+    role: "system",
+    content:
+      `The working folder for this conversation is ${folder}. ` +
+      `When the user asks you to read, create, modify, or run project ` +
+      `files, use the file, terminal, and code-execution tools with ` +
+      `absolute paths under this folder.`,
+  };
+}
+
 function sendMessageViaApi(
   message: string,
   cb: ChatCallbacks,
@@ -282,6 +302,7 @@ function sendMessageViaApi(
   _resumeSessionId?: string,
   history?: Array<{ role: string; content: string }>,
   attachments?: Attachment[],
+  contextFolder?: string,
 ): ChatHandle {
   const mc = getModelConfig(profile);
   const controller = new AbortController();
@@ -300,6 +321,14 @@ function sendMessageViaApi(
   }
   const userContent = buildUserContent(message, attachments);
   messages.push({ role: "user", content: userContent });
+
+  // Context folder (issue #27): when the conversation is bound to a working
+  // folder, prepend a system message so the agent scopes file/terminal work
+  // there. Injected only at the request-build step — the renderer's visible
+  // transcript stays clean, and getSessionMessages filters non-user/assistant
+  // roles, so reloaded sessions stay clean too.
+  const ctxSystem = contextFolderSystemMessage(contextFolder);
+  if (ctxSystem) messages.unshift(ctxSystem);
 
   const body = JSON.stringify({
     model: mc.model || "hermes-agent",
@@ -806,6 +835,7 @@ export async function sendMessage(
   resumeSessionId?: string,
   history?: Array<{ role: string; content: string }>,
   attachments?: Attachment[],
+  contextFolder?: string,
 ): Promise<ChatHandle> {
   ensureInitialized();
 
@@ -818,6 +848,7 @@ export async function sendMessage(
       resumeSessionId,
       history,
       attachments,
+      contextFolder,
     );
   }
 
@@ -834,6 +865,7 @@ export async function sendMessage(
       resumeSessionId,
       history,
       attachments,
+      contextFolder,
     );
   }
 

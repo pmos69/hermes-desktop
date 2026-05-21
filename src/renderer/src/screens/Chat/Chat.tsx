@@ -39,6 +39,9 @@ function Chat({
   const [usage, setUsage] = useState<UsageState | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [remoteMode, setRemoteMode] = useState(false);
+  // Working folder bound to this conversation (issue #27). Per-conversation,
+  // held in memory; reset on session switch / new chat below.
+  const [contextFolder, setContextFolder] = useState<string | null>(null);
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
 
@@ -76,16 +79,20 @@ function Chat({
     if (messages.length === 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setHermesSessionId(null);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setContextFolder(null);
     }
   }, [messages]);
 
-  // Sync the gateway session id when the parent swaps to a different session.
-  // Chat is not remounted on session switch, so a stale hermesSessionId from a
-  // previous conversation would otherwise survive — causing sends to resume,
-  // and the Clear button to delete, the WRONG session (issue #276).
+  // When the parent swaps to a different session, sync local state to it:
+  // the gateway session id (a stale one resumes/deletes the WRONG session —
+  // issue #276) and the per-conversation context folder (issue #27). Chat is
+  // not remounted on session switch, so this must be done explicitly.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHermesSessionId(sessionId);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setContextFolder(null);
   }, [sessionId]);
 
   // Cmd/Ctrl+N → new chat
@@ -122,6 +129,7 @@ function Chat({
     }
     setMessages([]);
     setHermesSessionId(null);
+    setContextFolder(null);
     setUsage(null);
     setToolProgress(null);
   }, [isLoading, hermesSessionId, sessionId, setMessages]);
@@ -145,10 +153,20 @@ function Chat({
     onSessionStarted,
     chatInputRef,
     localCommands,
+    contextFolder,
   });
 
   const handleSuggestion = useCallback((text: string) => {
     chatInputRef.current?.setText(text);
+  }, []);
+
+  const handlePickFolder = useCallback(async () => {
+    const path = await window.hermesAPI.selectFolder();
+    if (path) setContextFolder(path);
+  }, []);
+
+  const handleClearFolder = useCallback(() => {
+    setContextFolder(null);
   }, []);
 
   // Drag-and-drop: filter for dragenter events carrying files (suppresses
@@ -213,6 +231,10 @@ function Chat({
         usage={usage}
         fastMode={fastMode}
         hasMessages={messages.length > 0}
+        contextFolder={contextFolder}
+        showContextFolder={!remoteMode}
+        onPickFolder={handlePickFolder}
+        onClearFolder={handleClearFolder}
         onToggleFast={toggleFastMode}
         onNewChat={onNewChat}
         onClear={handleClear}

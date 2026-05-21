@@ -17,6 +17,8 @@ interface UseChatActionsArgs {
   onSessionStarted?: () => void;
   chatInputRef: React.RefObject<ChatInputHandle | null>;
   localCommands: LocalCommands;
+  /** Working folder bound to this conversation (issue #27), or null. */
+  contextFolder: string | null;
 }
 
 interface UseChatActionsResult {
@@ -43,6 +45,7 @@ export function useChatActions({
   onSessionStarted,
   chatInputRef,
   localCommands,
+  contextFolder,
 }: UseChatActionsArgs): UseChatActionsResult {
   const messagesRef = useRef(messages);
   const isLoadingRef = useRef(isLoading);
@@ -78,12 +81,13 @@ export function useChatActions({
             content: m.content,
           })),
           attachments,
+          contextFolder ?? undefined,
         );
       } catch {
         // onChatError IPC already surfaces this to the user
       }
     },
-    [profile, hermesSessionId],
+    [profile, hermesSessionId, contextFolder],
   );
 
   const handleSend = useCallback(
