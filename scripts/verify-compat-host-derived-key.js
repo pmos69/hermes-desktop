@@ -62,6 +62,26 @@ async function attach() {
   const cfgFile = path.join(home, "config.yaml");
   const envFile = path.join(home, ".env");
 
+  // Phase A2 — snapshot original .env so we can restore on teardown, then
+  // strip any pre-existing DEEPSEEK_API_KEY so we can observe the fix
+  // writing one. The fix's "don't overwrite existing host-derived key"
+  // behaviour is correct (a real user key shouldn't be clobbered by a
+  // custom-provider seed) but it makes the test unobservable when the
+  // copied-from-user config already had DEEPSEEK_API_KEY.
+  const envOriginal = fs.existsSync(envFile)
+    ? fs.readFileSync(envFile, "utf-8")
+    : "";
+  const envWithoutHostKey = envOriginal
+    .split("\n")
+    .filter((l) => !l.startsWith("DEEPSEEK_API_KEY="))
+    .join("\n");
+  if (envWithoutHostKey !== envOriginal) {
+    fs.writeFileSync(envFile, envWithoutHostKey);
+    console.log(
+      "[A2] Stripped pre-existing DEEPSEEK_API_KEY so the fix's write is observable",
+    );
+  }
+
   // Phase B — append custom_providers entry to config.yaml (if not present)
   const cfg = fs.existsSync(cfgFile) ? fs.readFileSync(cfgFile, "utf-8") : "";
   if (!cfg.includes(PROVIDER_NAME)) {
@@ -139,25 +159,15 @@ async function attach() {
     process.exitCode = 2;
   }
 
-  // Phase E — teardown
-  console.log("\n[E] Removing test custom-provider entry…");
+  // Phase E — teardown: restore original .env and config.yaml exactly
+  console.log("\n[E] Restoring original .env and removing test entry…");
+  fs.writeFileSync(envFile, envOriginal);
   const cfgAfter = fs.readFileSync(cfgFile, "utf-8");
   const cleanedCfg = cfgAfter.replace(
     /\ncustom_providers:[\s\S]*?(?=\n[a-z_]+\s*:|$)/,
     "",
   );
   fs.writeFileSync(cfgFile, cleanedCfg);
-
-  // Also wipe the two env vars we just wrote
-  const cleanedEnv = envContent
-    .split("\n")
-    .filter(
-      (l) =>
-        !l.startsWith(customPrefixKey + "=") &&
-        !l.startsWith(`DEEPSEEK_API_KEY=${FAKE_KEY}`),
-    )
-    .join("\n");
-  fs.writeFileSync(envFile, cleanedEnv);
   console.log("Cleanup done.");
 
   await browser.close();
