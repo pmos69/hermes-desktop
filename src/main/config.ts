@@ -612,7 +612,7 @@ export function getModelConfig(profile?: string): {
  * block's existing indent. When the block itself doesn't exist, append
  * one with the new key inside.
  */
-function upsertBlockChild(
+export function upsertBlockChild(
   content: string,
   blockName: string,
   key: string,

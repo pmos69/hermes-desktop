@@ -23,11 +23,15 @@ import {
   hasOAuthCredentials,
   maskKey,
   readEnv,
+  setConfigValue,
   setEnvValue,
+  upsertBlockChild,
 } from "./config";
+import { safeWriteFile } from "./utils";
 import { HERMES_HOME } from "./installer";
 import { expectedEnvKeyForModel } from "./installer";
 import { expectedEnvKeyForUrl } from "../shared/url-key-map";
+import { findSiblingHermesHomes } from "./wsl-detection";
 
 export type Severity = "error" | "warning" | "info";
 
@@ -37,7 +41,8 @@ export type IssueCode =
   | "EMPTY_API_SERVER_KEY"
   | "MODEL_KEY_MISSING"
   | "UI_RUNTIME_ENVKEY_MISMATCH"
-  | "NON_ASCII_CREDENTIAL";
+  | "NON_ASCII_CREDENTIAL"
+  | "SIBLING_HERMES_HOME_DRIFT";
 
 export interface ConfigHealthIssue {
   code: IssueCode;
@@ -82,6 +87,7 @@ export function runConfigHealthCheck(
     checkActiveModelKeyPresence,
     checkRuntimeEnvKeyMismatch,
     checkNonAsciiCredentials,
+    checkSiblingHermesHomeDrift,
   ];
 
   for (const check of checks) {
@@ -121,6 +127,8 @@ export function autoFixIssue(
         return fixRuntimeEnvKeyMismatch(profile, context);
       case "NON_ASCII_CREDENTIAL":
         return fixNonAsciiCredential(profile, context);
+      case "SIBLING_HERMES_HOME_DRIFT":
+        return fixSiblingHermesHomeDrift(profile, context);
       default:
         return { ok: false, message: `No auto-fix available for ${code}` };
     }
@@ -449,6 +457,337 @@ function fixNonAsciiCredential(
   }
   return { ok: true, message: `Cleaned: ${cleaned.join(", ")}.` };
 }
+
+// ───────────────────────────────────────────────────────
+//  Sibling-hermes-home drift check (Windows + WSL)
+//
+//  Hermes Desktop reads its config from %LocalAppData%\hermes\. Users
+//  who also run the `hermes` CLI inside a WSL distro have a second,
+//  separate ~/.hermes/ at /home/<user>/.hermes/ on the WSL fs. The
+//  two are independent. When they drift (a key set on one side but
+//  not the other, two different keys, etc.), the user gets confusing
+//  errors like "Invalid token payload" because chat goes through the
+//  Windows-side config but they configured the WSL-side. Issue #384
+//  is a textbook case.
+//
+//  The check enumerates accessible WSL ~/.hermes/ directories
+//  (fail-soft — no WSL, no result), compares a curated set of
+//  fields, and emits one issue per drifting field. Auto-fix is
+//  offered ONLY when the direction is unambiguous (one side empty,
+//  the other has a value).
+// ───────────────────────────────────────────────────────
+
+/** Fields we compare across sibling hermes-homes. Each entry is
+ *  `{ source, field, label }`:
+ *   - `source` — `env` (reads from `.env`) or `config` (reads
+ *     from `config.yaml` via dotted-path getConfigValue equivalent)
+ *   - `field` — the key/path name
+ *   - `label` — what to call it in messages
+ *
+ *  Adding to this list is cheap; pick fields whose drift causes
+ *  real user-visible bugs. */
+const DRIFT_FIELDS: ReadonlyArray<{
+  source: "env" | "config";
+  field: string;
+  label: string;
+}> = [
+  // .env credentials — the most common drift cause
+  { source: "env", field: "API_SERVER_KEY", label: "API_SERVER_KEY (.env)" },
+  { source: "env", field: "OPENROUTER_API_KEY", label: "OPENROUTER_API_KEY (.env)" },
+  { source: "env", field: "ANTHROPIC_API_KEY", label: "ANTHROPIC_API_KEY (.env)" },
+  { source: "env", field: "OPENAI_API_KEY", label: "OPENAI_API_KEY (.env)" },
+  { source: "env", field: "DEEPSEEK_API_KEY", label: "DEEPSEEK_API_KEY (.env)" },
+  { source: "env", field: "GROQ_API_KEY", label: "GROQ_API_KEY (.env)" },
+  { source: "env", field: "MISTRAL_API_KEY", label: "MISTRAL_API_KEY (.env)" },
+  { source: "env", field: "TOGETHER_API_KEY", label: "TOGETHER_API_KEY (.env)" },
+  { source: "env", field: "FIREWORKS_API_KEY", label: "FIREWORKS_API_KEY (.env)" },
+  { source: "env", field: "CEREBRAS_API_KEY", label: "CEREBRAS_API_KEY (.env)" },
+  { source: "env", field: "PERPLEXITY_API_KEY", label: "PERPLEXITY_API_KEY (.env)" },
+  { source: "env", field: "GOOGLE_API_KEY", label: "GOOGLE_API_KEY (.env)" },
+  { source: "env", field: "XAI_API_KEY", label: "XAI_API_KEY (.env)" },
+  { source: "env", field: "NOUS_API_KEY", label: "NOUS_API_KEY (.env)" },
+  { source: "env", field: "HF_TOKEN", label: "HF_TOKEN (.env)" },
+  { source: "env", field: "CUSTOM_API_KEY", label: "CUSTOM_API_KEY (.env)" },
+  // config.yaml fields — the model-specific ones, including the
+  // `api_key` field that issue #384 was hitting.
+  { source: "config", field: "model.provider", label: "model.provider (config.yaml)" },
+  { source: "config", field: "model.default", label: "model.default (config.yaml)" },
+  { source: "config", field: "model.base_url", label: "model.base_url (config.yaml)" },
+  { source: "config", field: "model.api_key", label: "model.api_key (config.yaml)" },
+  { source: "config", field: "api_server.token", label: "api_server.token (config.yaml)" },
+];
+
+/** True when the field's value should be treated as a secret in
+ *  user-facing messages (mask-shown, never quoted in full). */
+function isSecretField(label: string): boolean {
+  return /API_KEY|TOKEN|api_key|token/.test(label);
+}
+
+interface SiblingEnv {
+  values: Record<string, string>; // field-or-dotted-path → value
+  envFile: string;
+  configFile: string;
+}
+
+/** Read the curated subset of fields from a sibling hermes-home. */
+function readSiblingFields(home: string): SiblingEnv {
+  const envFile = join(home, ".env");
+  const configFile = join(home, "config.yaml");
+  const values: Record<string, string> = {};
+  // .env
+  let envText = "";
+  try {
+    if (existsSync(envFile)) envText = readFileSync(envFile, "utf-8");
+  } catch {
+    /* unreadable distro fs — leave empty */
+  }
+  const envMap: Record<string, string> = {};
+  for (const line of envText.split("\n")) {
+    const m = line.match(/^([A-Z][A-Z0-9_]*)=(.*)$/);
+    if (m) envMap[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
+  }
+  // config.yaml
+  let configText = "";
+  try {
+    if (existsSync(configFile)) configText = readFileSync(configFile, "utf-8");
+  } catch {
+    /* unreadable */
+  }
+  for (const { source, field } of DRIFT_FIELDS) {
+    if (source === "env") {
+      values[field] = (envMap[field] ?? "").trim();
+    } else {
+      // simple dotted-path read against the YAML text — enough for
+      // the flat 1- or 2-segment paths we care about
+      values[field] = readDottedYaml(configText, field);
+    }
+  }
+  return { values, envFile, configFile };
+}
+
+/** Tiny dotted-path YAML reader. Handles the 1- and 2-segment cases
+ *  we use here. Returns "" for missing values. Not a general YAML
+ *  parser — duplicates a slice of what `getConfigValue` does
+ *  internally, but takes a string instead of a profile so we can
+ *  point it at sibling files. */
+function readDottedYaml(text: string, dotted: string): string {
+  const parts = dotted.split(".");
+  if (parts.length === 1) {
+    const re = new RegExp(`^\\s*${parts[0]}\\s*:\\s*(.+?)\\s*$`, "m");
+    const m = text.match(re);
+    return m ? m[1].replace(/^["']|["']$/g, "").trim() : "";
+  }
+  if (parts.length === 2) {
+    const blockRe = new RegExp(`^${parts[0]}:\\s*\\n((?:[ \\t]+.*\\n?)*)`, "m");
+    const blockM = text.match(blockRe);
+    if (!blockM) return "";
+    const child = new RegExp(
+      `^[ \\t]+${parts[1]}\\s*:\\s*(.+?)\\s*$`,
+      "m",
+    );
+    const m = blockM[1].match(child);
+    return m ? m[1].replace(/^["']|["']$/g, "").trim() : "";
+  }
+  return "";
+}
+
+/** Current Windows-side fields, read with the same readers so the
+ *  comparison is apples-to-apples. */
+function readCurrentFields(profile: string | undefined): SiblingEnv {
+  // Reuse readSiblingFields by pointing it at the profile home —
+  // identical parse logic, so any quirk in our YAML reader applies
+  // symmetrically and won't false-flag.
+  return readSiblingFields(profilePaths(profile).home);
+}
+
+function checkSiblingHermesHomeDrift(
+  profile?: string,
+): ConfigHealthIssue[] {
+  const siblings = findSiblingHermesHomes();
+  if (siblings.length === 0) return [];
+
+  const current = readCurrentFields(profile);
+  const issues: ConfigHealthIssue[] = [];
+
+  for (const sibling of siblings) {
+    const siblingFields = readSiblingFields(sibling.hermesHome);
+
+    for (const { field, label } of DRIFT_FIELDS) {
+      const winValue = current.values[field] ?? "";
+      const wslValue = siblingFields.values[field] ?? "";
+      if (winValue === wslValue) continue;
+
+      const isSecret = isSecretField(label);
+      const winMasked = isSecret ? maskKey(winValue) : winValue;
+      const wslMasked = isSecret ? maskKey(wslValue) : wslValue;
+      const where = `${sibling.distro}:/home/${sibling.user}/.hermes`;
+
+      // Direction A: one side empty, the other has a value →
+      // unambiguous, auto-fixable. Default direction WSL → Windows
+      // (assumption: Hermes Desktop is the broken side, the user's
+      // CLI on WSL is the working setup). If reverse direction is
+      // ever needed, expose a second fixId.
+      if (!winValue && wslValue) {
+        issues.push({
+          code: "SIBLING_HERMES_HOME_DRIFT",
+          severity: "warning",
+          message: `${label} is set on WSL (${sibling.distro}) but not on the Windows side that Hermes Desktop reads.`,
+          detail:
+            `WSL value (${where}): ${wslMasked}\n` +
+            `Windows value: (not set)\n\n` +
+            `Hermes Desktop reads only ${current.envFile.replace(/\\\.env$/, "")} — your CLI on WSL works, the desktop doesn't, because the value never made it across. Auto-fix copies the WSL value into the Windows-side file.`,
+          locations: [
+            current.configFile,
+            current.envFile,
+            sibling.hermesHome,
+          ],
+          autoFixable: true,
+          fixDescription: `Copy ${label} from WSL (${sibling.distro}) → Windows side.`,
+          fixLocation: ".env",
+          context: {
+            field,
+            distro: sibling.distro,
+            user: sibling.user,
+            wslHome: sibling.hermesHome,
+            direction: "wsl-to-windows",
+          },
+        });
+      } else if (winValue && !wslValue) {
+        // Reverse case — Windows has a value but WSL doesn't.
+        // Less common (user has the desktop working but the CLI
+        // broken). Surface as info, not auto-fixable from here
+        // (we don't want to write to WSL silently).
+        issues.push({
+          code: "SIBLING_HERMES_HOME_DRIFT",
+          severity: "info",
+          message: `${label} is set on Windows but not on WSL (${sibling.distro}).`,
+          detail:
+            `Windows value: ${winMasked}\n` +
+            `WSL value (${where}): (not set)\n\n` +
+            `Hermes Desktop reads the Windows side, so this isn't blocking the desktop. Just a heads-up that your CLI on WSL is missing this value if you also use it there.`,
+          locations: [current.envFile, sibling.hermesHome],
+          autoFixable: false,
+          context: {
+            field,
+            distro: sibling.distro,
+            user: sibling.user,
+            direction: "windows-to-wsl",
+          },
+        });
+      } else {
+        // Both sides have non-empty values that differ. Could be
+        // intentional (separate billing accounts, dev vs prod
+        // keys). Surface as info, no auto-fix.
+        issues.push({
+          code: "SIBLING_HERMES_HOME_DRIFT",
+          severity: "info",
+          message: `${label} has different values on Windows and WSL (${sibling.distro}).`,
+          detail:
+            `Windows value: ${winMasked}\n` +
+            `WSL value (${where}): ${wslMasked}\n\n` +
+            `Hermes Desktop reads only the Windows side. If these were supposed to be the same, copy whichever value is current to the other side. If they're intentionally different, this notice is informational.`,
+          locations: [current.envFile, sibling.hermesHome],
+          autoFixable: false,
+          context: {
+            field,
+            distro: sibling.distro,
+            user: sibling.user,
+            direction: "ambiguous",
+          },
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
+function fixSiblingHermesHomeDrift(
+  profile: string | undefined,
+  context: Record<string, string> | undefined,
+): { ok: boolean; message?: string } {
+  const field = context?.field;
+  const wslHome = context?.wslHome;
+  const direction = context?.direction;
+  if (!field || !wslHome) {
+    return { ok: false, message: "Missing fix context (field/wslHome)." };
+  }
+  if (direction !== "wsl-to-windows") {
+    return {
+      ok: false,
+      message:
+        "Only WSL → Windows auto-fix is supported. For the reverse direction, edit the WSL file manually.",
+    };
+  }
+
+  const siblingFields = readSiblingFields(wslHome);
+  const value = (siblingFields.values[field] ?? "").trim();
+  if (!value) {
+    return { ok: false, message: `WSL value for ${field} is empty.` };
+  }
+
+  // Dispatch by field source — env vars go through setEnvValue,
+  // config.yaml fields through setConfigValue.
+  const fieldDef = DRIFT_FIELDS.find((f) => f.field === field);
+  if (!fieldDef) {
+    return { ok: false, message: `Unknown field ${field}.` };
+  }
+  try {
+    if (fieldDef.source === "env") {
+      setEnvValue(field, value, profile);
+    } else {
+      // config.yaml field. For top-level keys (e.g. `API_SERVER_KEY`)
+      // `setConfigValue` handles both update + append. For dotted
+      // paths under an existing block (`model.api_key`,
+      // `api_server.token`), `setConfigValue` only updates — it
+      // refuses to insert a missing leaf to avoid corrupting the
+      // file. We DO want to insert here (that's the whole point of
+      // the fix), so use `upsertBlockChild` directly for the
+      // 2-segment case.
+      const segments = field.split(".");
+      if (segments.length === 1) {
+        setConfigValue(field, value, profile);
+      } else if (segments.length === 2) {
+        const { configFile } = profilePaths(profile);
+        const content = existsSync(configFile)
+          ? readFileSync(configFile, "utf-8")
+          : "";
+        const next = upsertBlockChild(
+          content,
+          segments[0],
+          segments[1],
+          value,
+        );
+        safeWriteFile(configFile, next);
+      } else {
+        return {
+          ok: false,
+          message: `Unsupported config.yaml path depth: ${field}`,
+        };
+      }
+    }
+    appendConfigFixLog({
+      ts: Date.now(),
+      issueCode: "SIBLING_HERMES_HOME_DRIFT",
+      action: "autofix",
+      from: `wsl:${wslHome}/${fieldDef.source === "env" ? ".env" : "config.yaml"}`,
+      to: fieldDef.source === "env" ? "%LocalAppData%/hermes/.env" : "%LocalAppData%/hermes/config.yaml",
+      profile: profile || "default",
+      valueMasked: isSecretField(fieldDef.label) ? maskKey(value) : value,
+      detail: field,
+    });
+    return {
+      ok: true,
+      message: `Copied ${field} from WSL to the Windows-side ${fieldDef.source === "env" ? ".env" : "config.yaml"}.`,
+    };
+  } catch (err) {
+    return { ok: false, message: (err as Error).message };
+  }
+}
+
+// Re-export for tests that want to call the check directly without
+// going through `runConfigHealthCheck`.
+export { checkSiblingHermesHomeDrift, fixSiblingHermesHomeDrift };
 
 /**
  * Path to the JSONL audit log of all config fixes. Exposed so the
