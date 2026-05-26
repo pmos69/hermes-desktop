@@ -8,7 +8,84 @@ deterministic than screenshot-driven testing.
 The harness is **opt-in**: nothing about it touches production builds
 or normal `npm run dev` workflows.
 
-## Quickstart
+---
+
+## Running a specific repro script (from a GitHub issue comment)
+
+If you landed here from an issue comment that linked to `scripts/repro-<name>.js`,
+this section walks you through running it from a clean checkout.
+
+### Prerequisites
+
+- Node.js 20+ (`node --version` to check)
+- Git
+- A working `hermes-agent` install on your machine (the same one Hermes
+  Desktop uses — if Hermes Desktop runs for you, you have it)
+- Two terminals open side-by-side
+
+### One-time setup
+
+```bash
+# 1. Clone the branch that contains the repro scripts:
+git clone -b test/369-382-383-stack https://github.com/pmos69/hermes-desktop.git
+cd hermes-desktop
+
+# 2. Install dev deps (takes 1–3 min on first run):
+npm install
+```
+
+### Each time you run a repro
+
+```bash
+# Terminal 1 — start the dev electron with the CDP debug port enabled.
+# This builds + launches the desktop app. Wait ~15 seconds until you
+# see the Hermes Agent window appear. It will use your real
+# ~/.hermes/ profile, so any chats you already have are visible.
+ENABLE_CDP=1 npm run dev
+```
+
+```bash
+# Terminal 2 — run the script. The verdict line at the bottom of the
+# output tells you whether the bug reproduces on your machine.
+node scripts/repro-<name>.js
+```
+
+### What the output looks like
+
+Every repro script ends with a single `[VERDICT]` line:
+
+- `[VERDICT] 🔴 REPRODUCED — …` → you're hitting the bug. Add a comment
+  on the issue with your `[VERDICT]` line + your OS / model / version
+  so the maintainer has evidence from multiple environments.
+- `[VERDICT] ✅ …` → the bug doesn't trigger on your machine. Some bugs
+  are host- or model-dependent (e.g. line-ending behaviour differs
+  between macOS and Windows); a ✅ doesn't mean the bug isn't real,
+  just that your environment happens to dodge it.
+- `[VERDICT] ⚠️ …` → the script saw something unexpected. Paste the
+  full output in the issue.
+
+### Common issues
+
+- **`Failed to connect to 127.0.0.1:9222`** — Terminal 1 isn't running,
+  or you forgot the `ENABLE_CDP=1` prefix. Restart it.
+- **`bind() returned an error`** in Terminal 1's log — port 9222 is
+  already in use (often a zombie from a previous run). Use a different
+  port: `ENABLE_CDP=1 CDP_PORT=9223 npm run dev`, then run the script
+  with `CDP_PORT=9223 node scripts/repro-<name>.js`.
+- **The script touches your real profile**. Most repros back up the
+  files they mutate (`auth.json`, `config.yaml`, `sessions.json`) and
+  restore on exit. Skim the script's header comment if you want to
+  know exactly what it'll touch before running.
+
+### Don't want to run the script?
+
+A `+1 from <your OS / model>` comment on the issue is also useful
+evidence. The script just gives a deterministic verdict; describing
+your symptoms in plain English is equally valid input.
+
+---
+
+## Quickstart (for contributors writing new scripts)
 
 1.  Start dev electron with CDP enabled:
 
