@@ -90,6 +90,7 @@ import {
   setModelConfig,
   getCredentialPool,
   setCredentialPool,
+  addCredentialPoolEntry,
   getConnectionConfig,
   getPublicConnectionConfig,
   resolveConnectionApiKeyUpdate,
@@ -1245,11 +1246,28 @@ function setupIPC(): void {
     (
       _event,
       provider: string,
-      entries: Array<{ key: string; label: string }>,
+      entries: Array<Record<string, unknown>>,
       profile?: string,
     ) => {
       setCredentialPool(provider, entries, profile);
       return true;
+    },
+  );
+
+  // Append a user-typed key as a properly-shaped credential pool
+  // entry. Constructs the full upstream schema (id, label, auth_type,
+  // priority, source, access_token, base_url, request_count) so the
+  // engine's resolver can read it — issue #367 Bug 3.
+  ipcMain.handle(
+    "add-credential-pool-entry",
+    (
+      _event,
+      provider: string,
+      apiKey: string,
+      label: string,
+      profile?: string,
+    ) => {
+      return addCredentialPoolEntry(provider, apiKey, label, profile);
     },
   );
 
