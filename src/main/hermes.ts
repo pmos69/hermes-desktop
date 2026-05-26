@@ -28,7 +28,7 @@ import { pidIsAliveAs, stripAnsi } from "./utils";
 import { readModels } from "./models";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
-import { URL_KEY_MAP } from "../shared/url-key-map";
+import { hostDerivedEnvKeyForUrl } from "./host-derived-env";
 
 const LOCAL_API_URL = "http://127.0.0.1:8642";
 

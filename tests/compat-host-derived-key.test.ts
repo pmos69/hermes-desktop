@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hostDerivedEnvKeyForUrl } from "../src/main/hermes";
+import { hostDerivedEnvKeyForUrl } from "../src/main/host-derived-env";
 
 /**
  * Dual-engine compat: the desktop writes a host-derived `<VENDOR>_API_KEY`
