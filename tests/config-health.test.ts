@@ -281,3 +281,158 @@ describe("autoFixIssue", () => {
     expect(entry.valueMasked).not.toBe("sk-audit-me");
   });
 });
+
+describe("checkLegacyToolsetName", () => {
+  it("flags a top-level toolsets list containing legacy `- hermes`", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: auto",
+        "  default: ''",
+        "toolsets:",
+        "- hermes",
+        "agent:",
+        "  max_turns: 60",
+        "",
+      ].join("\n"),
+    );
+    const { checkLegacyToolsetName } = await freshHealth(TEST_DIR);
+    const issues = checkLegacyToolsetName();
+    expect(issues).toHaveLength(1);
+    expect(issues[0].code).toBe("LEGACY_TOOLSET_NAME");
+    expect(issues[0].severity).toBe("warning");
+    expect(issues[0].autoFixable).toBe(true);
+    expect(issues[0].fixLocation).toBe("config.yaml");
+  });
+
+  it("emits no issue when toolsets uses the canonical `hermes-cli` name", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: auto",
+        "  default: ''",
+        "toolsets:",
+        "- hermes-cli",
+        "",
+      ].join("\n"),
+    );
+    const { checkLegacyToolsetName } = await freshHealth(TEST_DIR);
+    expect(checkLegacyToolsetName()).toEqual([]);
+  });
+
+  it("emits no issue when only platform-suffixed names are present (`hermes-telegram` etc.)", async () => {
+    writeConfig(
+      [
+        "toolsets:",
+        "- hermes-cli",
+        "- hermes-telegram",
+        "- hermes-discord",
+        "",
+      ].join("\n"),
+    );
+    const { checkLegacyToolsetName } = await freshHealth(TEST_DIR);
+    expect(checkLegacyToolsetName()).toEqual([]);
+  });
+
+  it("tolerates quoted entries and trailing comments", async () => {
+    writeConfig(
+      [
+        "toolsets:",
+        '  - "hermes"   # legacy alias',
+        "",
+      ].join("\n"),
+    );
+    const { checkLegacyToolsetName } = await freshHealth(TEST_DIR);
+    const issues = checkLegacyToolsetName();
+    expect(issues).toHaveLength(1);
+    expect(issues[0].code).toBe("LEGACY_TOOLSET_NAME");
+  });
+
+  it("only inspects the top-level toolsets block, not platform_toolsets", async () => {
+    // `platform_toolsets.cli` is the desktop's own enable list; the legacy
+    // check must not flag a per-platform `hermes` entry under a different
+    // parent (that block uses its own validation in tools.ts).
+    writeConfig(
+      [
+        "toolsets:",
+        "- hermes-cli",
+        "platform_toolsets:",
+        "  cli:",
+        "  - web",
+        "  - hermes", // would be a false positive if the parser leaked
+        "",
+      ].join("\n"),
+    );
+    const { checkLegacyToolsetName } = await freshHealth(TEST_DIR);
+    expect(checkLegacyToolsetName()).toEqual([]);
+  });
+
+  it("emits no issue when config.yaml is missing", async () => {
+    const { checkLegacyToolsetName } = await freshHealth(TEST_DIR);
+    expect(checkLegacyToolsetName()).toEqual([]);
+  });
+});
+
+describe("fixLegacyToolsetName", () => {
+  it("rewrites the legacy entry in place", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: auto",
+        "toolsets:",
+        "- hermes",
+        "agent:",
+        "  max_turns: 60",
+        "",
+      ].join("\n"),
+    );
+    const { fixLegacyToolsetName } = await freshHealth(TEST_DIR);
+    const result = fixLegacyToolsetName();
+    expect(result.ok).toBe(true);
+    const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf-8");
+    expect(after).toMatch(/^- hermes-cli$/m);
+    expect(after).not.toMatch(/^- hermes$/m);
+    // Other blocks untouched
+    expect(after).toMatch(/^agent:$/m);
+    expect(after).toMatch(/^model:$/m);
+  });
+
+  it("preserves quoting style and trailing comment when rewriting", async () => {
+    writeConfig(
+      [
+        "toolsets:",
+        '  - "hermes"   # legacy alias',
+        "",
+      ].join("\n"),
+    );
+    const { fixLegacyToolsetName } = await freshHealth(TEST_DIR);
+    expect(fixLegacyToolsetName().ok).toBe(true);
+    const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf-8");
+    expect(after).toMatch(/^\s+- "hermes-cli"\s+# legacy alias$/m);
+  });
+
+  it("returns ok:false when nothing matches", async () => {
+    writeConfig(["toolsets:", "- hermes-cli", ""].join("\n"));
+    const { fixLegacyToolsetName } = await freshHealth(TEST_DIR);
+    const result = fixLegacyToolsetName();
+    expect(result.ok).toBe(false);
+  });
+
+  it("writes an audit-log entry recording the rewrite", async () => {
+    writeConfig(["toolsets:", "- hermes", ""].join("\n"));
+    const { fixLegacyToolsetName } = await freshHealth(TEST_DIR);
+    fixLegacyToolsetName();
+    const logFile = join(TEST_DIR, "logs", "config-fixes.log");
+    expect(existsSync(logFile)).toBe(true);
+    const entry = JSON.parse(
+      readFileSync(logFile, "utf-8")
+        .split("\n")
+        .filter((l) => l.trim() !== "")
+        .pop()!,
+    );
+    expect(entry.issueCode).toBe("LEGACY_TOOLSET_NAME");
+    expect(entry.action).toBe("autofix");
+    expect(entry.from).toBe("hermes");
+    expect(entry.to).toBe("hermes-cli");
+  });
+});

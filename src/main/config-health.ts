@@ -42,7 +42,8 @@ export type IssueCode =
   | "MODEL_KEY_MISSING"
   | "UI_RUNTIME_ENVKEY_MISMATCH"
   | "NON_ASCII_CREDENTIAL"
-  | "SIBLING_HERMES_HOME_DRIFT";
+  | "SIBLING_HERMES_HOME_DRIFT"
+  | "LEGACY_TOOLSET_NAME";
 
 export interface ConfigHealthIssue {
   code: IssueCode;
@@ -88,6 +89,7 @@ export function runConfigHealthCheck(
     checkRuntimeEnvKeyMismatch,
     checkNonAsciiCredentials,
     checkSiblingHermesHomeDrift,
+    checkLegacyToolsetName,
   ];
 
   for (const check of checks) {
@@ -129,6 +131,8 @@ export function autoFixIssue(
         return fixNonAsciiCredential(profile, context);
       case "SIBLING_HERMES_HOME_DRIFT":
         return fixSiblingHermesHomeDrift(profile, context);
+      case "LEGACY_TOOLSET_NAME":
+        return fixLegacyToolsetName(profile);
       default:
         return { ok: false, message: `No auto-fix available for ${code}` };
     }
@@ -788,6 +792,173 @@ function fixSiblingHermesHomeDrift(
 // Re-export for tests that want to call the check directly without
 // going through `runConfigHealthCheck`.
 export { checkSiblingHermesHomeDrift, fixSiblingHermesHomeDrift };
+
+// ───────────────────────────────────────────────────────
+//  LEGACY_TOOLSET_NAME — `toolsets:` list still has "hermes"
+// ───────────────────────────────────────────────────────
+
+/**
+ * The bundled hermes-agent CLI renamed its default toolset alias from
+ * "hermes" (legacy) to "hermes-cli". Configs written by older versions —
+ * either an older bundled engine or a prior standalone hermes CLI install —
+ * still reference the legacy name in their top-level `toolsets:` block.
+ * The current engine's validator no longer recognises `"hermes"` and
+ * prints `Warning: Unknown toolsets: hermes` on every agent invocation
+ * (issues #353, fresh #385/Telegram reports).
+ *
+ * The fix is a one-line YAML rewrite: `- hermes` → `- hermes-cli`. The
+ * agent still functions today — it's a cosmetic warning — but it
+ * clutters every chat session and looks broken to new users.
+ */
+function checkLegacyToolsetName(profile?: string): ConfigHealthIssue[] {
+  const issues: ConfigHealthIssue[] = [];
+  const { configFile } = profilePaths(profile);
+  if (!existsSync(configFile)) return issues;
+
+  let content: string;
+  try {
+    content = readFileSync(configFile, "utf-8");
+  } catch {
+    return issues;
+  }
+
+  if (!findLegacyToolsetEntry(content)) return issues;
+
+  issues.push({
+    code: "LEGACY_TOOLSET_NAME",
+    severity: "warning",
+    message:
+      'config.yaml references the legacy toolset name "hermes" — the current engine expects "hermes-cli".',
+    detail:
+      'The bundled hermes-agent CLI renamed the default toolset alias ' +
+      'from "hermes" to "hermes-cli". The agent still runs, but every ' +
+      'invocation prints `Warning: Unknown toolsets: hermes` until the ' +
+      "entry is updated. Auto-fix rewrites the line in place.",
+    locations: [configFile],
+    autoFixable: true,
+    fixDescription: "Rewrite `- hermes` → `- hermes-cli` in config.yaml.",
+    fixLocation: "config.yaml",
+  });
+  return issues;
+}
+
+/**
+ * Scan the top-level `toolsets:` block for a literal `- hermes` entry
+ * (the legacy alias). Returns true on the first match. Indentation-
+ * aware: stops at the first top-level (non-indented) line after the
+ * `toolsets:` header. Tolerates quoted forms (`- "hermes"`, `- 'hermes'`)
+ * and trailing comments.
+ *
+ * Does NOT match `hermes-cli` / `hermes-telegram` / `hermes-discord` /
+ * etc. — those are the current canonical names and must not be touched.
+ */
+function findLegacyToolsetEntry(content: string): boolean {
+  const lines = content.split("\n");
+  let inToolsets = false;
+  for (const line of lines) {
+    if (/^toolsets\s*:/.test(line)) {
+      inToolsets = true;
+      continue;
+    }
+    if (!inToolsets) continue;
+    // Exit the block on the next un-indented (top-level) non-empty line
+    // that ISN'T a list item. YAML allows `- foo` at zero indent under
+    // a parent key (and that's what `hermes setup` actually writes), so
+    // a line starting with `-` is still part of the block.
+    if (/^[^\s-]/.test(line) && line.trim() !== "") {
+      inToolsets = false;
+      continue;
+    }
+    // List item shape: optional whitespace, dash, whitespace, optional
+    // quote, NAME, optional matching quote, optional trailing comment.
+    // NAME captured tightly so `hermes-cli` doesn't match `hermes`.
+    const m = line.match(/^\s*-\s+(["']?)([\w-]+)\1\s*(#.*)?$/);
+    if (m && m[2] === "hermes") return true;
+  }
+  return false;
+}
+
+/**
+ * Rewrite every `- hermes` entry inside the top-level `toolsets:` block
+ * to `- hermes-cli`, preserving indentation, quoting style, and any
+ * trailing comment. Re-runs `findLegacyToolsetEntry` on the result so
+ * the function is a no-op if there's nothing to fix.
+ */
+function fixLegacyToolsetName(
+  profile?: string,
+): { ok: boolean; message?: string } {
+  try {
+    const { configFile } = profilePaths(profile);
+    if (!existsSync(configFile)) {
+      return { ok: false, message: "config.yaml not found" };
+    }
+    const original = readFileSync(configFile, "utf-8");
+    if (!findLegacyToolsetEntry(original)) {
+      return { ok: false, message: "No legacy toolset entry found." };
+    }
+
+    const lines = original.split("\n");
+    let inToolsets = false;
+    let changed = false;
+    const out: string[] = [];
+    for (const line of lines) {
+      if (/^toolsets\s*:/.test(line)) {
+        inToolsets = true;
+        out.push(line);
+        continue;
+      }
+      if (inToolsets) {
+        // Same un-indent-but-not-list-item exit rule as the parser.
+        if (/^[^\s-]/.test(line) && line.trim() !== "") {
+          inToolsets = false;
+          out.push(line);
+          continue;
+        }
+        // Rewrite the legacy entry only — leave hermes-cli et al alone.
+        // Accept both zero-indent (`- hermes`) and indented (`  - hermes`).
+        const m = line.match(
+          /^(\s*-\s+)(["']?)hermes\2(\s*(?:#.*)?)$/,
+        );
+        if (m) {
+          const prefix = m[1];
+          const quote = m[2];
+          const suffix = m[3];
+          out.push(`${prefix}${quote}hermes-cli${quote}${suffix}`);
+          changed = true;
+          continue;
+        }
+      }
+      out.push(line);
+    }
+    if (!changed) {
+      // findLegacyToolsetEntry said yes but the rewrite regex missed —
+      // shouldn't happen, but fail loudly rather than silently no-op.
+      return {
+        ok: false,
+        message: "Detected legacy entry but rewrite did not match.",
+      };
+    }
+    safeWriteFile(configFile, out.join("\n"));
+    appendConfigFixLog({
+      ts: Date.now(),
+      issueCode: "LEGACY_TOOLSET_NAME",
+      action: "autofix",
+      from: "hermes",
+      to: "hermes-cli",
+      profile: profile || "default",
+      detail: "toolsets[] entry",
+    });
+    return {
+      ok: true,
+      message: "Rewrote `- hermes` → `- hermes-cli` in config.yaml.",
+    };
+  } catch (err) {
+    return { ok: false, message: (err as Error).message };
+  }
+}
+
+// Re-export for tests that exercise the check directly.
+export { checkLegacyToolsetName, fixLegacyToolsetName };
 
 /**
  * Path to the JSONL audit log of all config fixes. Exposed so the
