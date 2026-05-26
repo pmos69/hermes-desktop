@@ -15,14 +15,13 @@
 
 import { existsSync, readdirSync, statSync } from "fs";
 import { execFileSync } from "child_process";
-import { join } from "path";
 
 const IS_WINDOWS = process.platform === "win32";
 
-/** Path to the WSL CLI on Windows. Only used as an existence check —
- *  the actual distro list comes from filesystem enumeration which
- *  doesn't require running wsl.exe (and so doesn't wake a stopped
- *  distro). */
+/** Path to the WSL CLI on Windows. Used both as an existence check
+ *  and to enumerate distros via `wsl.exe -l -q` — which per
+ *  Microsoft docs does NOT start any distro, so it's safe to call
+ *  on a cold WSL. */
 const WSL_EXE = "C:\\Windows\\System32\\wsl.exe";
 
 /**
@@ -54,25 +53,33 @@ export function isWindowsHostWithWsl(): boolean {
 }
 
 /**
- * Enumerate WSL distros visible to the user. Uses the `\\wsl$\` UNC
- * root rather than running `wsl.exe -l` so a stopped distro doesn't
- * get auto-woken (and so a slow WSL service doesn't slow the audit).
+ * Enumerate WSL distros via `wsl.exe -l -q`. Per Microsoft docs,
+ * `--list` does NOT start any distro, so this is safe to call on a
+ * cold WSL — it just enumerates what's installed. Output is one
+ * distro name per line, UTF-16LE encoded.
  *
- * Returns [] if WSL isn't installed, the UNC root isn't accessible,
- * or anything throws. Cheap to call (~1ms when no WSL, ~10ms with).
+ * Previously this used `readdirSync("\\\\wsl$\\")` to avoid spawning
+ * a subprocess, but Node's path normalisation mangles the bare
+ * `\\wsl$\` root into `C:\wsl$\` and ENOENTs out — even though the
+ * per-distro paths like `\\wsl$\Ubuntu-24.04\...` resolve fine.
+ * Caught in live testing; the readdir approach would have made the
+ * check silently never fire on real WSL hosts.
+ *
+ * Returns [] if WSL isn't installed, `wsl.exe` errors, or anything
+ * throws. Fail-soft.
  */
 export function listWslDistros(): string[] {
   if (!isWindowsHostWithWsl()) return [];
-  const wslRoot = "\\\\wsl$\\";
   try {
-    if (!existsSync(wslRoot)) return [];
-    return readdirSync(wslRoot).filter((name) => {
-      try {
-        return statSync(join(wslRoot, name)).isDirectory();
-      } catch {
-        return false;
-      }
+    const raw = execFileSync(WSL_EXE, ["-l", "-q"], {
+      encoding: "utf16le",
+      timeout: 5000,
+      windowsHide: true,
     });
+    return String(raw)
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
   } catch {
     return [];
   }
