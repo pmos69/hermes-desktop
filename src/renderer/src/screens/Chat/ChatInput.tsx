@@ -28,11 +28,22 @@ export interface ChatInputHandle {
   addFiles(files: File[] | FileList): Promise<AttachmentError[]>;
 }
 
+export interface ChatInputReadiness {
+  ok: boolean;
+  code?: string;
+  message?: string;
+  fixLocation?: string;
+  expectedEnvKey?: string;
+}
+
 interface ChatInputProps {
   isLoading: boolean;
   hasSession: boolean;
   sessionId?: string | null;
   remoteMode?: boolean;
+  /** Pre-send validation state. When `ok` is false, Send is disabled
+   * and an inline banner explains why + how to fix it. */
+  readiness?: ChatInputReadiness;
   onSubmit: (text: string, attachments: Attachment[]) => void;
   onQuickAsk: (text: string, attachments: Attachment[]) => void;
   onAbort: () => void;
@@ -45,6 +56,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       hasSession,
       sessionId,
       remoteMode,
+      readiness,
       onSubmit,
       onQuickAsk,
       onAbort,
@@ -338,8 +350,28 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       setAttachmentError(null);
     }
 
+    const readinessOk = readiness?.ok !== false;
     const canSend =
-      (input.trim().length > 0 || attachments.length > 0) && !isLoading;
+      (input.trim().length > 0 || attachments.length > 0) &&
+      !isLoading &&
+      readinessOk;
+
+    // Map fixLocation → user-facing call to action. The strings are
+    // wrapped in i18n; the location ids come from main/validation.ts.
+    function readinessFixLabel(loc: string | undefined): string {
+      switch (loc) {
+        case "providers":
+          return t("chat.validation.fixInProviders");
+        case "models":
+          return t("chat.validation.fixInModels");
+        case "gateway":
+          return t("chat.validation.fixInGateway");
+        case "setup":
+          return t("chat.validation.fixInSetup");
+        default:
+          return "";
+      }
+    }
 
     return (
       <>
@@ -364,6 +396,26 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 </button>
               ))}
             </div>
+          </div>
+        )}
+        {!readinessOk && readiness?.message && (
+          <div
+            className="chat-readiness-banner"
+            role="alert"
+            data-testid="chat-readiness-banner"
+          >
+            <span className="chat-readiness-message">
+              {readiness.expectedEnvKey
+                ? t("chat.validation.missingKey", {
+                    key: readiness.expectedEnvKey,
+                  })
+                : readiness.message}
+            </span>
+            {readiness.fixLocation && (
+              <span className="chat-readiness-fix">
+                {readinessFixLabel(readiness.fixLocation)}
+              </span>
+            )}
           </div>
         )}
         {(attachments.length > 0 || attachmentError) && (

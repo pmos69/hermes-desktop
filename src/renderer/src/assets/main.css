@@ -1833,6 +1833,247 @@ body {
   padding-top: 2px;
 }
 
+/* Pre-send readiness banner — shown above the chat input when the
+ * desktop detects an obvious misconfiguration (missing API key for
+ * the active provider, etc.). Fail-open: only renders when validation
+ * has flagged a specific issue. */
+.chat-readiness-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 6px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--warning, var(--border));
+  border-left-width: 3px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+
+.chat-readiness-message {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chat-readiness-fix {
+  flex: 0 0 auto;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* ConfigHealthBanner — appears at the top of Chat when the startup
+ * audit found inconsistencies. One-liner summary + link to Diagnose. */
+.config-health-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+
+.config-health-banner-error {
+  background: var(--error-bg, var(--bg-secondary));
+  color: var(--error, var(--text-primary));
+}
+
+.config-health-banner-warning {
+  background: var(--warning-bg, var(--bg-secondary));
+  color: var(--text-primary);
+}
+
+.config-health-banner-info {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.config-health-banner-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.config-health-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.config-health-banner-link {
+  background: transparent;
+  border: none;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  padding: 2px 4px;
+}
+
+.config-health-banner-dismiss {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.75;
+}
+
+.config-health-banner-dismiss:hover {
+  opacity: 1;
+}
+
+/* Diagnose panel inside Settings */
+.diagnose-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.diagnose-rerun-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.diagnose-rerun-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.diagnose-loading,
+.diagnose-empty {
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.diagnose-issue-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diagnose-issue {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.diagnose-issue-error {
+  border-left-color: var(--error, #c0392b);
+}
+
+.diagnose-issue-warning {
+  border-left-color: var(--warning, #d6a700);
+}
+
+.diagnose-issue-info {
+  border-left-color: var(--text-secondary);
+}
+
+.diagnose-issue-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diagnose-issue-code {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.diagnose-issue-message {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.diagnose-issue-detail {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.diagnose-issue-locations {
+  list-style: disc inside;
+  margin: 6px 0 0;
+  padding-left: 4px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-family: var(--font-mono, monospace);
+}
+
+.diagnose-issue-fix {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.diagnose-fix-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  background: var(--accent, var(--bg-tertiary));
+  color: var(--accent-fg, var(--text-primary));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.diagnose-fix-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.diagnose-issue-fix-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.diagnose-issue-result {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.diag-icon-error {
+  color: var(--error, #c0392b);
+}
+
+.diag-icon-warning {
+  color: var(--warning, #d6a700);
+}
+
+.diag-icon-info,
+.diag-icon-ok {
+  color: var(--text-secondary);
+}
+
 .attachment-chip {
   position: relative;
   display: inline-flex;

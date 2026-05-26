@@ -109,6 +109,34 @@ const hermesAPI = {
   setEnv: (key: string, value: string, profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("set-env", key, value, profile),
 
+  validateChatReadiness: (
+    profile?: string,
+  ): Promise<{
+    ok: boolean;
+    code?:
+      | "NO_ACTIVE_MODEL"
+      | "NO_PROVIDER"
+      | "NO_BASE_URL"
+      | "MISSING_API_KEY"
+      | "GATEWAY_DOWN";
+    message?: string;
+    fixLocation?: "providers" | "models" | "gateway" | "setup";
+    expectedEnvKey?: string;
+  }> => ipcRenderer.invoke("validate-chat-readiness", profile),
+
+  getConfigHealth: (profile?: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-config-health", profile),
+  rerunConfigHealth: (profile?: string): Promise<unknown> =>
+    ipcRenderer.invoke("rerun-config-health", profile),
+  autofixConfigIssue: (
+    code: string,
+    profile?: string,
+    context?: Record<string, string>,
+  ): Promise<{ ok: boolean; message?: string }> =>
+    ipcRenderer.invoke("autofix-config-issue", code, profile, context),
+  getConfigFixLog: (maxEntries?: number): Promise<unknown[]> =>
+    ipcRenderer.invoke("get-config-fix-log", maxEntries),
+
   getConfig: (key: string, profile?: string): Promise<string | null> =>
     ipcRenderer.invoke("get-config", key, profile),
 

@@ -15,6 +15,7 @@ import {
   getAnalyticsConsent,
   setAnalyticsConsent,
 } from "../../utils/analytics";
+import { ConfigHealth } from "./ConfigHealth";
 
 const TELEGRAM_COMMUNITY_URL = "https://t.me/hermes_agent_desktop";
 
@@ -415,6 +416,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   return (
     <div className="settings-container">
       <h1 className="settings-header">{t("settings.title")}</h1>
+
+      <ConfigHealth />
 
       <div className="settings-section">
         <div className="settings-section-title">

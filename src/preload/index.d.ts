@@ -28,6 +28,36 @@ interface InstallProgress {
   log: string;
 }
 
+interface ConfigHealthIssue {
+  code: string;
+  severity: "error" | "warning" | "info";
+  message: string;
+  detail?: string;
+  locations: string[];
+  autoFixable: boolean;
+  fixDescription?: string;
+  fixLocation?: "providers" | "models" | ".env" | "config.yaml" | "setup";
+  context?: Record<string, string>;
+}
+
+interface ConfigHealthReport {
+  ranAt: number;
+  profile: string;
+  issues: ConfigHealthIssue[];
+  summary: { errors: number; warnings: number; infos: number };
+}
+
+interface ConfigFixLogEntry {
+  ts: number;
+  issueCode: string;
+  action: "migrate" | "autofix" | "manual-fix";
+  from?: string;
+  to?: string;
+  profile?: string;
+  valueMasked?: string;
+  detail?: string;
+}
+
 interface KanbanTask {
   id: string;
   title: string;
@@ -153,6 +183,28 @@ interface HermesAPI {
   // Configuration (profile-aware)
   getEnv: (profile?: string) => Promise<Record<string, string>>;
   setEnv: (key: string, value: string, profile?: string) => Promise<boolean>;
+  validateChatReadiness: (profile?: string) => Promise<{
+    ok: boolean;
+    code?:
+      | "NO_ACTIVE_MODEL"
+      | "NO_PROVIDER"
+      | "NO_BASE_URL"
+      | "MISSING_API_KEY"
+      | "GATEWAY_DOWN";
+    message?: string;
+    fixLocation?: "providers" | "models" | "gateway" | "setup";
+    expectedEnvKey?: string;
+  }>;
+
+  // Config-health audit (Diagnose section)
+  getConfigHealth: (profile?: string) => Promise<ConfigHealthReport>;
+  rerunConfigHealth: (profile?: string) => Promise<ConfigHealthReport>;
+  autofixConfigIssue: (
+    code: string,
+    profile?: string,
+    context?: Record<string, string>,
+  ) => Promise<{ ok: boolean; message?: string }>;
+  getConfigFixLog: (maxEntries?: number) => Promise<ConfigFixLogEntry[]>;
   getConfig: (key: string, profile?: string) => Promise<string | null>;
   setConfig: (key: string, value: string, profile?: string) => Promise<boolean>;
   getHermesHome: (profile?: string) => Promise<string>;

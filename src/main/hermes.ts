@@ -28,6 +28,7 @@ import { pidIsAliveAs, stripAnsi } from "./utils";
 import { readModels } from "./models";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
+import { URL_KEY_MAP } from "../shared/url-key-map";
 
 const LOCAL_API_URL = "http://127.0.0.1:8642";
 
@@ -154,21 +155,6 @@ const OPENAI_COMPAT_PROVIDERS = new Set([
   "cerebras",
   "mistral",
 ]);
-
-// Map base-URL patterns to the API key env var they need
-const URL_KEY_MAP: Array<{ pattern: RegExp; envKey: string }> = [
-  { pattern: /openrouter\.ai/i, envKey: "OPENROUTER_API_KEY" },
-  { pattern: /anthropic\.com/i, envKey: "ANTHROPIC_API_KEY" },
-  { pattern: /openai\.com/i, envKey: "OPENAI_API_KEY" },
-  { pattern: /huggingface\.co/i, envKey: "HF_TOKEN" },
-  { pattern: /api\.groq\.com/i, envKey: "GROQ_API_KEY" },
-  { pattern: /api\.deepseek\.com/i, envKey: "DEEPSEEK_API_KEY" },
-  { pattern: /api\.together\.xyz/i, envKey: "TOGETHER_API_KEY" },
-  { pattern: /api\.fireworks\.ai/i, envKey: "FIREWORKS_API_KEY" },
-  { pattern: /api\.cerebras\.ai/i, envKey: "CEREBRAS_API_KEY" },
-  { pattern: /api\.mistral\.ai/i, envKey: "MISTRAL_API_KEY" },
-  { pattern: /api\.perplexity\.ai/i, envKey: "PERPLEXITY_API_KEY" },
-];
 
 interface ChatHandle {
   abort: () => void;
@@ -1058,6 +1044,39 @@ export function startGateway(profile?: string): boolean {
     if (value) {
       gatewayEnv[key] = value;
     }
+  }
+
+  // Inject the resolved API_SERVER_KEY into the gateway's env.
+  //
+  // The desktop's `getApiServerKey` reads the shared secret from six
+  // sources: config.yaml top-level `API_SERVER_KEY:`, `.env`
+  // `API_SERVER_KEY=`, and config.yaml `api_server.token:` (each per-profile
+  // and default-profile). The upstream gateway's `APIServerAdapter` (see
+  // `gateway/platforms/api_server.py:647`) only reads two of those:
+  // `api_server.extra.key` from config.yaml, or `os.getenv("API_SERVER_KEY")`
+  // at startup. Upstream `gateway/run.py:608-610` bridges *top-level*
+  // config.yaml keys into env vars, so `API_SERVER_KEY:` at the top
+  // level works — but the nested `api_server.token:` location does not
+  // become an env var, and the gateway never reads it directly.
+  //
+  // The result is a divergence: the desktop happily sends
+  // `Authorization: Bearer <key>` + `X-Hermes-Session-Id` for users
+  // whose key lives in `api_server.token`, while the gateway's
+  // `self._api_key` is empty and returns 403 with
+  //   "Session continuation requires API key authentication.
+  //    Configure API_SERVER_KEY to enable this feature."
+  // (api_server.py:1097-1109). This is what users on Telegram, Reddit,
+  // and several open issues have been hitting since v0.5.1 — PR #357
+  // started sending the session header on every fresh chat, which made
+  // the latent divergence user-visible on every send.
+  //
+  // Bridging the desktop's resolved value into the spawn env makes the
+  // gateway's `os.getenv("API_SERVER_KEY")` fallback see whatever the
+  // desktop sees, regardless of source. This is the canonical fix until
+  // upstream learns to read `api_server.token` directly.
+  const resolvedApiServerKey = getApiServerKey(profile);
+  if (resolvedApiServerKey) {
+    gatewayEnv.API_SERVER_KEY = resolvedApiServerKey;
   }
 
   gatewayProcess = spawn(HERMES_PYTHON, hermesCliArgs(["gateway"]), {

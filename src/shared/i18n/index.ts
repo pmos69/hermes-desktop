@@ -27,6 +27,7 @@ import memoryEn from "./locales/en/memory";
 import installEn from "./locales/en/install";
 import constantsEn from "./locales/en/constants";
 import kanbanEn from "./locales/en/kanban";
+import diagnoseEn from "./locales/en/diagnose";
 import commonEs from "./locales/es/common";
 import navigationEs from "./locales/es/navigation";
 import welcomeEs from "./locales/es/welcome";
@@ -168,6 +169,7 @@ import memoryPtPt from "./locales/pt-PT/memory";
 import installPtPt from "./locales/pt-PT/install";
 import constantsPtPt from "./locales/pt-PT/constants";
 import kanbanPtPt from "./locales/pt-PT/kanban";
+import diagnosePtPt from "./locales/pt-PT/diagnose";
 
 export const resources = {
   en: {
@@ -193,6 +195,7 @@ export const resources = {
       install: installEn,
       constants: constantsEn,
       kanban: kanbanEn,
+      diagnose: diagnoseEn,
     },
   },
   es: {
@@ -338,6 +341,7 @@ export const resources = {
       install: installPtPt,
       constants: constantsPtPt,
       kanban: kanbanPtPt,
+      diagnose: diagnosePtPt,
     },
   },
   ja: {

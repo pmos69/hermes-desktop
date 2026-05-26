@@ -300,6 +300,14 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   glm: "GLM_API_KEY",
   kimi: "KIMI_API_KEY",
   nvidia: "NVIDIA_API_KEY",
+  // Nous Portal supports BOTH OAuth (`nous` variant) AND API key
+  // (`nous-api` variant). Register the env var name under both ids so
+  // the install-gate + pre-send validation + config-health audit can
+  // detect a missing key — whichever id the user's profile happens to
+  // be configured under. The OAuth case is handled separately by
+  // checking auth.json via hasOAuthCredentials() (config.ts).
+  nous: "NOUS_API_KEY",
+  "nous-api": "NOUS_API_KEY",
 };
 
 // When provider is "custom" or "auto", the desktop's setup flow falls
