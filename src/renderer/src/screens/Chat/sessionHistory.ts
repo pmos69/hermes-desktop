@@ -129,6 +129,13 @@ function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+function normalizeBubbleContentForMatch(s: string): string {
+  return normalizeWhitespace(s).replace(
+    /(?:\s+\[(?:screenshot|image)\])+$/i,
+    "",
+  );
+}
+
 function reconciliationKey(m: ChatMessage): string | null {
   if ("kind" in m) {
     switch (m.kind) {
@@ -143,7 +150,7 @@ function reconciliationKey(m: ChatMessage): string | null {
     }
   }
   const bubble = m as ChatBubbleMessage;
-  return `${bubble.role}:${normalizeWhitespace(bubble.content || "").slice(0, 200)}`;
+  return `${bubble.role}:${normalizeBubbleContentForMatch(bubble.content || "").slice(0, 200)}`;
 }
 
 /**
@@ -161,7 +168,11 @@ function mergeDbMetadataIntoStreamed(
   const s = streamed as ChatBubbleMessage;
   const d = db as ChatBubbleMessage;
   // Attachments from the DB that the stream didn't deliver.
-  if (d.attachments && d.attachments.length > 0 && (!s.attachments || s.attachments.length === 0)) {
+  if (
+    d.attachments &&
+    d.attachments.length > 0 &&
+    (!s.attachments || s.attachments.length === 0)
+  ) {
     return { ...s, attachments: d.attachments };
   }
   return s;
@@ -248,7 +259,9 @@ export function reconcileStreamedWithDb(
     for (const m of items) {
       if (!("kind" in m)) {
         const bubble = m as ChatBubbleMessage;
-        seen.add(`${bubble.role}:${normalizeWhitespace(bubble.content || "")}`);
+        seen.add(
+          `${bubble.role}:${normalizeBubbleContentForMatch(bubble.content || "")}`,
+        );
       }
     }
   };
@@ -265,7 +278,7 @@ export function reconcileStreamedWithDb(
     // genuinely new.
     if (!("kind" in m)) {
       const bubble = m as ChatBubbleMessage;
-      const contentKey = `${bubble.role}:${normalizeWhitespace(bubble.content || "")}`;
+      const contentKey = `${bubble.role}:${normalizeBubbleContentForMatch(bubble.content || "")}`;
       if (seen.has(contentKey)) return false;
       seen.add(contentKey);
     }

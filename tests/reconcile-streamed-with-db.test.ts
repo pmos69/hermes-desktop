@@ -30,6 +30,22 @@ const STREAMED_USER = (content: string, id = "u-1"): ChatMessage => ({
   content,
 });
 
+const STREAMED_IMAGE_USER = (content: string, id = "u-img"): ChatMessage => ({
+  id,
+  role: "user",
+  content,
+  attachments: [
+    {
+      id: "img-1",
+      kind: "image",
+      name: "pasted-image.png",
+      mime: "image/png",
+      size: 3,
+      dataUrl: "data:image/png;base64,AAA=",
+    },
+  ],
+});
+
 const STREAMED_AGENT = (content: string, id = "a-1"): ChatMessage => ({
   id,
   role: "agent",
@@ -294,5 +310,61 @@ describe("reconcileStreamedWithDb", () => {
       "db-tr-32",
       "a-new",
     ]);
+  });
+
+  it("matches a streamed image user bubble to the DB screenshot placeholder", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_IMAGE_USER("describe this image", "u-img"),
+      STREAMED_AGENT("It is a simple cartoon image.", "a-img"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("describe this image\n[screenshot]", 40),
+      DB_AGENT("It is a simple cartoon image.", 41),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged).toHaveLength(2);
+    expect(merged[0].id).toBe("u-img");
+    expect(merged[0]).toMatchObject({
+      role: "user",
+      content: "describe this image",
+    });
+    expect(
+      ("attachments" in merged[0] && merged[0].attachments) || [],
+    ).toHaveLength(1);
+    expect(merged[1].id).toBe("a-img");
+  });
+
+  it("does not append an old streamed image turn after later DB-only rows", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_IMAGE_USER("describe this image", "u-img"),
+      STREAMED_AGENT("It is a simple cartoon image.", "a-img"),
+      STREAMED_USER("what time is it", "u-time"),
+      STREAMED_AGENT("It's Wed, May 27, 2026, 3:51 PM.", "a-time"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("describe this image\n[screenshot]", 50),
+      DB_AGENT("It is a simple cartoon image.", 51),
+      DB_USER("what time is it", 52),
+      DB_TOOL_CALL("call-time", "terminal", '{"command":"date"}', 53),
+      DB_TOOL_RESULT("call-time", "terminal", "Wed, May 27, 2026 3:51 PM", 54),
+      DB_AGENT("It's Wed, May 27, 2026, 3:51 PM.", 55),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "u-img",
+      "a-img",
+      "u-time",
+      "db-tc-53-call-time",
+      "db-tr-54",
+      "a-time",
+    ]);
+    expect(merged.filter((m) => m.id === "u-img")).toHaveLength(1);
+    expect(
+      ("attachments" in merged[0] && merged[0].attachments) || [],
+    ).toHaveLength(1);
   });
 });
