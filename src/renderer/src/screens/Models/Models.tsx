@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash, Search, X } from "../../assets/icons";
-import { PROVIDERS } from "../../constants";
+import { LOCAL_PRESETS, PROVIDERS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import BrandLogo from "../../components/common/BrandLogo";
 import { detectProviderFromUrl } from "./detect-provider";
@@ -17,6 +17,15 @@ interface SavedModel {
 
 function providerLabelKey(value: string): string {
   return PROVIDERS.options.find((p) => p.value === value)?.label || value;
+}
+
+function localPresetForProvider(value: string): {
+  id: string;
+  baseUrl: string;
+} | null {
+  return (
+    LOCAL_PRESETS.find((p) => p.group === "local" && p.id === value) || null
+  );
 }
 
 interface ModelsProps {
@@ -83,11 +92,14 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
   // Live model discovery for the Add/Edit modal — feeds an HTML
   // <datalist> off the Model ID input.  Pauses when the modal is closed
   // so we don't fire background requests on every keystroke elsewhere.
-  const isCustomForm = formProvider === "custom";
+  const discoveryBaseUrl =
+    formProvider === "custom" || localPresetForProvider(formProvider)
+      ? formBaseUrl
+      : undefined;
   const [discoveryRefresh, setDiscoveryRefresh] = useState(0);
   const discovery = useDiscoveredModels({
     provider: formProvider,
-    baseUrl: isCustomForm ? formBaseUrl : undefined,
+    baseUrl: discoveryBaseUrl,
     apiKey: formApiKey || undefined,
     enabled: showModal && formProvider !== "auto",
     refreshToken: discoveryRefresh,
@@ -396,7 +408,14 @@ function Models({ visible }: ModelsProps = {}): React.JSX.Element {
                   className="input"
                   value={formProvider}
                   onChange={(e) => {
-                    setFormProvider(e.target.value);
+                    const nextProvider = e.target.value;
+                    setFormProvider(nextProvider);
+                    const localPreset = localPresetForProvider(nextProvider);
+                    if (localPreset) {
+                      setFormBaseUrl(localPreset.baseUrl);
+                    } else if (nextProvider !== "custom") {
+                      setFormBaseUrl("");
+                    }
                     setProviderTouched(true);
                     setProviderAutoFilled(false);
                   }}

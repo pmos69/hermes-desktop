@@ -43,6 +43,13 @@ export const PROVIDERS = {
     { value: "qwen", label: "Qwen" },
     { value: "minimax", label: "MiniMax" },
     { value: "nous", label: "constants.nousName" },
+    // Local OpenAI-compatible servers. Keep these explicit so users
+    // looking for "Ollama" or "LM Studio" do not have to discover the
+    // generic custom-provider path first.
+    { value: "lmstudio", label: "constants.lmstudio" },
+    { value: "ollama", label: "constants.ollama" },
+    { value: "vllm", label: "constants.vllm" },
+    { value: "llamacpp", label: "constants.llamacpp" },
     // Subscription / OAuth plans
     // openai-codex is listed once above (first-party group) via #102 —
     // not repeated here to avoid a duplicate <option> value.
@@ -75,6 +82,10 @@ export const PROVIDERS = {
     qwen: "Qwen",
     minimax: "MiniMax",
     nous: "constants.nousName",
+    lmstudio: "constants.lmstudio",
+    ollama: "constants.ollama",
+    vllm: "constants.vllm",
+    llamacpp: "constants.llamacpp",
     "xai-oauth": "xAI Grok (OAuth)",
     "qwen-oauth": "Qwen (OAuth)",
     "google-gemini-cli": "Gemini (CLI OAuth)",

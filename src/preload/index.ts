@@ -293,7 +293,7 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{
     models: string[];
-    status: "ok" | "no-key" | "unsupported" | "unknown-host";
+    status: "ok" | "no-key" | "error" | "unsupported" | "unknown-host";
     cached: boolean;
     /** Subset of `models` flagged as free per the provider catalog
      *  (Nous Portal today). Optional — providers without pricing

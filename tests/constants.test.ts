@@ -29,6 +29,10 @@ describe("PROVIDERS", () => {
     expect(values).toContain("nous");
     expect(values).toContain("qwen");
     expect(values).toContain("minimax");
+    expect(values).toContain("lmstudio");
+    expect(values).toContain("ollama");
+    expect(values).toContain("vllm");
+    expect(values).toContain("llamacpp");
     expect(values).toContain("custom");
   });
 
@@ -206,6 +210,16 @@ describe("LOCAL_PRESETS", () => {
     const ids = LOCAL_PRESETS.map((p) => p.id);
     expect(ids).toContain("lmstudio");
     expect(ids).toContain("ollama");
+    expect(ids).toContain("vllm");
+    expect(ids).toContain("llamacpp");
+  });
+
+  it("exposes every local preset as a provider dropdown option", () => {
+    const options = new Set(PROVIDERS.options.map((o) => o.value));
+    for (const preset of LOCAL_PRESETS.filter((p) => p.group === "local")) {
+      expect(options.has(preset.id)).toBe(true);
+      expect(PROVIDERS.labels[preset.id]).toBeTruthy();
+    }
   });
 });
 

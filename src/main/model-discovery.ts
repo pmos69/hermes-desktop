@@ -246,6 +246,13 @@ const _cache = new Map<string, CacheEntry>();
 // with the main cache via `_clearCache` for test isolation.
 const _freeCache = new Map<string, string[]>();
 
+const LOCAL_NO_KEY_PROVIDERS = new Set([
+  "lmstudio",
+  "ollama",
+  "vllm",
+  "llamacpp",
+]);
+
 function cacheKey(provider: string, baseUrl: string): string {
   return `${provider.toLowerCase()}|${baseUrl.replace(/\/+$/, "").toLowerCase()}`;
 }
@@ -330,7 +337,13 @@ function buildUrl(base: string): string {
   return `${trimmed}/models`;
 }
 
+interface FetchModelsResult {
+  models: string[];
+  reachable: boolean;
+}
+
 function authHeaders(provider: string, apiKey: string): Record<string, string> {
+  if (!apiKey) return {};
   const lower = provider.toLowerCase();
   if (lower === "anthropic") {
     // Anthropic uses x-api-key + an API version header on /v1/models.
@@ -342,13 +355,28 @@ function authHeaders(provider: string, apiKey: string): Record<string, string> {
   return { Authorization: `Bearer ${apiKey}` };
 }
 
+function isLoopbackBaseUrl(baseUrl: string): boolean {
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
 function fetchModelsHttp(
   url: string,
   headers: Record<string, string>,
   timeoutMs: number,
-): Promise<string[]> {
+): Promise<FetchModelsResult> {
   return new Promise((resolve) => {
-    const u = new URL(url);
+    let u: URL;
+    try {
+      u = new URL(url);
+    } catch {
+      resolve({ models: [], reachable: false });
+      return;
+    }
     const mod = u.protocol === "https:" ? https : http;
     const req = mod.request(
       {
@@ -363,7 +391,7 @@ function fetchModelsHttp(
       (res) => {
         if (!res.statusCode || res.statusCode >= 400) {
           res.resume();
-          resolve([]);
+          resolve({ models: [], reachable: true });
           return;
         }
         let body = "";
@@ -371,14 +399,16 @@ function fetchModelsHttp(
         res.on("data", (chunk) => {
           body += chunk;
         });
-        res.on("end", () => resolve(parseModelIds(body)));
-        res.on("error", () => resolve([]));
+        res.on("end", () =>
+          resolve({ models: parseModelIds(body), reachable: true }),
+        );
+        res.on("error", () => resolve({ models: [], reachable: false }));
       },
     );
-    req.on("error", () => resolve([]));
+    req.on("error", () => resolve({ models: [], reachable: false }));
     req.on("timeout", () => {
       req.destroy();
-      resolve([]);
+      resolve({ models: [], reachable: false });
     });
     req.end();
   });
@@ -388,10 +418,11 @@ export interface DiscoverModelsResult {
   models: string[];
   /** ``"ok"`` when the call succeeded (even if zero models came back).
    *  ``"no-key"`` when the caller didn't pass one and we couldn't find a
-   *  matching ``<NAME>_API_KEY``.  ``"unsupported"`` for providers we know
-   *  don't expose this endpoint.  ``"unknown-host"`` when neither caller
-   *  nor mapping table can resolve a base URL. */
-  status: "ok" | "no-key" | "unsupported" | "unknown-host";
+   *  matching ``<NAME>_API_KEY``.  ``"error"`` when the provider could not
+   *  be reached.  ``"unsupported"`` for providers we know don't expose this
+   *  endpoint.  ``"unknown-host"`` when neither caller nor mapping table can
+   *  resolve a base URL. */
+  status: "ok" | "no-key" | "error" | "unsupported" | "unknown-host";
   /** ``true`` when the result came from the in-memory cache. */
   cached: boolean;
   /** Subset of `models` flagged as free (no cost per token). Populated
@@ -463,13 +494,21 @@ export async function discoverProviderModels(
   const apiKey =
     (apiKeyOverride || "").trim() ||
     envApiKeyFor(lowerProvider, baseUrl, profile);
-  if (!apiKey) return { models: [], status: "no-key", cached: false };
+  const canDiscoverWithoutKey =
+    LOCAL_NO_KEY_PROVIDERS.has(lowerProvider) ||
+    (lowerProvider === "custom" && isLoopbackBaseUrl(baseUrl));
+  if (!apiKey && !canDiscoverWithoutKey) {
+    return { models: [], status: "no-key", cached: false };
+  }
 
   const url = buildUrl(baseUrl);
   const headers = authHeaders(lowerProvider, apiKey);
-  const models = await fetchModelsHttp(url, headers, 10_000);
-  setCache(lowerProvider, baseUrl, models);
-  return { models, status: "ok", cached: false };
+  const result = await fetchModelsHttp(url, headers, 10_000);
+  if (!result.reachable) {
+    return { models: [], status: "error", cached: false };
+  }
+  setCache(lowerProvider, baseUrl, result.models);
+  return { models: result.models, status: "ok", cached: false };
 }
 
 /** Internal: exposed for tests / debugging only.  Production callers

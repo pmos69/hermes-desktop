@@ -39,6 +39,21 @@ describe("provider-registry", () => {
       );
     });
 
+    it("returns default URLs for local OpenAI-compatible providers", () => {
+      expect(canonicalProviderBaseUrl("lmstudio")).toBe(
+        "http://localhost:1234/v1",
+      );
+      expect(canonicalProviderBaseUrl("ollama")).toBe(
+        "http://localhost:11434/v1",
+      );
+      expect(canonicalProviderBaseUrl("vllm")).toBe(
+        "http://localhost:8000/v1",
+      );
+      expect(canonicalProviderBaseUrl("llamacpp")).toBe(
+        "http://localhost:8080/v1",
+      );
+    });
+
     it("is case-insensitive on the provider id", () => {
       expect(canonicalProviderBaseUrl("DeepSeek")).toBe(
         "https://api.deepseek.com/v1",

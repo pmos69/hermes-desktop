@@ -21,17 +21,19 @@ export function detectProviderFromUrl(rawUrl: string): string | null {
   if (/dashscope(-intl)?\.aliyuncs\.com/.test(url)) return "qwen";
   if (/api\.minimax(i)?\.(chat|com)/.test(url)) return "minimax";
 
-  // Anything pointing at a private or loopback address is almost always a
-  // self-hosted OpenAI-compatible endpoint (Ollama, LM Studio, vLLM,
-  // llama.cpp) — surface that as "Local / Custom" so the model card label
-  // matches user expectation.
-  const host = extractHost(url);
-  if (host && isPrivateOrLoopback(host)) return "custom";
-
   // Well-known local-LLM ports on any host — Ollama 11434, LM Studio 1234,
   // vLLM 8000, llama.cpp 8080. These run on LAN VMs too, so we don't
   // require a private-IP match for the port-only heuristic.
-  if (/:(11434|1234|8000|8080)(\/|$)/.test(url)) return "custom";
+  if (/:11434(\/|$)/.test(url)) return "ollama";
+  if (/:1234(\/|$)/.test(url)) return "lmstudio";
+  if (/:8000(\/|$)/.test(url)) return "vllm";
+  if (/:8080(\/|$)/.test(url)) return "llamacpp";
+
+  // Anything else pointing at a private or loopback address is almost
+  // always a self-hosted OpenAI-compatible endpoint. Surface that as the
+  // generic custom path when the port does not identify a known local app.
+  const host = extractHost(url);
+  if (host && isPrivateOrLoopback(host)) return "custom";
 
   return null;
 }

@@ -81,7 +81,7 @@ describe("model-discovery", () => {
     expect(result.models).toEqual(["alpha", "beta", "gamma"]);
   });
 
-  it("returns status=no-key when no apiKey is provided or in .env", async () => {
+  it("returns status=no-key for public custom endpoints when no apiKey is provided or in .env", async () => {
     server = http.createServer(() => {
       throw new Error("must not be called when there's no key");
     });
@@ -92,12 +92,58 @@ describe("model-discovery", () => {
     const { discoverProviderModels } = await loadDiscovery();
     const result = await discoverProviderModels(
       "custom",
-      baseUrl,
+      "https://example.com/v1",
       undefined,
       undefined,
     );
     expect(result.status).toBe("no-key");
     expect(result.models).toEqual([]);
+  });
+
+  it("discovers loopback custom models without an API key", async () => {
+    let receivedAuth = "not-called";
+    server = http.createServer((req, res) => {
+      receivedAuth = String(req.headers["authorization"] || "");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ data: [{ id: "llama3.2:latest" }] }));
+    });
+    await listen();
+    writeFileSync(join(testHome, ".env"), "");
+
+    const { discoverProviderModels } = await loadDiscovery();
+    const result = await discoverProviderModels(
+      "custom",
+      baseUrl,
+      undefined,
+      undefined,
+    );
+
+    expect(result.status).toBe("ok");
+    expect(result.models).toEqual(["llama3.2:latest"]);
+    expect(receivedAuth).toBe("");
+  });
+
+  it("discovers named local-provider models without an API key", async () => {
+    let receivedAuth = "not-called";
+    server = http.createServer((req, res) => {
+      receivedAuth = String(req.headers["authorization"] || "");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ data: [{ id: "qwen2.5-coder:7b" }] }));
+    });
+    await listen();
+    writeFileSync(join(testHome, ".env"), "");
+
+    const { discoverProviderModels } = await loadDiscovery();
+    const result = await discoverProviderModels(
+      "ollama",
+      baseUrl,
+      undefined,
+      undefined,
+    );
+
+    expect(result.status).toBe("ok");
+    expect(result.models).toEqual(["qwen2.5-coder:7b"]);
+    expect(receivedAuth).toBe("");
   });
 
   it("returns status=unsupported for known no-discovery providers", async () => {
@@ -187,6 +233,26 @@ describe("model-discovery", () => {
       undefined,
     );
     expect(result.status).toBe("ok");
+    expect(result.models).toEqual([]);
+  });
+
+  it("returns status=error when the local provider cannot be reached", async () => {
+    server = http.createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ data: [{ id: "lmstudio-model" }] }));
+    });
+    await listen();
+    const offlineBaseUrl = baseUrl;
+    await close();
+
+    const { discoverProviderModels } = await loadDiscovery();
+    const result = await discoverProviderModels(
+      "lmstudio",
+      offlineBaseUrl,
+      undefined,
+      undefined,
+    );
+    expect(result.status).toBe("error");
     expect(result.models).toEqual([]);
   });
 

@@ -25,6 +25,10 @@ export const PROVIDER_BASE_URLS: Record<string, string> = {
   huggingface: "https://router.huggingface.co/v1",
   zai: "https://api.z.ai/api/paas/v4",
   anthropic: "https://api.anthropic.com/v1",
+  lmstudio: "http://localhost:1234/v1",
+  ollama: "http://localhost:11434/v1",
+  vllm: "http://localhost:8000/v1",
+  llamacpp: "http://localhost:8080/v1",
 };
 
 /**

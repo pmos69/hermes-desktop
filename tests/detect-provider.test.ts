@@ -32,36 +32,44 @@ describe("detectProviderFromUrl", () => {
     );
   });
 
-  it("identifies private-network and loopback addresses as custom", () => {
-    expect(detectProviderFromUrl("http://localhost:11434")).toBe("custom");
-    expect(detectProviderFromUrl("http://127.0.0.1:11434/v1")).toBe("custom");
-    expect(detectProviderFromUrl("http://192.168.1.50:11434")).toBe("custom");
-    expect(detectProviderFromUrl("http://10.0.0.5:8000")).toBe("custom");
-    expect(detectProviderFromUrl("http://172.20.0.3:1234")).toBe("custom");
-    expect(detectProviderFromUrl("http://hermes.local:11434")).toBe("custom");
+  it("identifies well-known local provider ports by provider", () => {
+    expect(detectProviderFromUrl("http://localhost:11434")).toBe("ollama");
+    expect(detectProviderFromUrl("http://127.0.0.1:11434/v1")).toBe("ollama");
+    expect(detectProviderFromUrl("http://192.168.1.50:11434")).toBe("ollama");
+    expect(detectProviderFromUrl("http://10.0.0.5:8000")).toBe("vllm");
+    expect(detectProviderFromUrl("http://172.20.0.3:1234")).toBe("lmstudio");
+    expect(detectProviderFromUrl("http://hermes.local:8080")).toBe(
+      "llamacpp",
+    );
   });
 
-  it("identifies well-known local-LLM ports on any host as custom", () => {
+  it("identifies private-network and loopback addresses with unknown ports as custom", () => {
+    expect(detectProviderFromUrl("http://localhost:9999")).toBe("custom");
+    expect(detectProviderFromUrl("http://192.168.1.50:9999")).toBe("custom");
+    expect(detectProviderFromUrl("http://hermes.local:9999")).toBe("custom");
+  });
+
+  it("identifies well-known local-LLM ports on any host", () => {
     // Ollama on a LAN VM with a public-looking hostname
     expect(
       detectProviderFromUrl("http://ollama.andrea-house.com:11434/v1"),
-    ).toBe("custom");
+    ).toBe("ollama");
     // LM Studio
     expect(
       detectProviderFromUrl("http://my-workstation.example.com:1234/v1"),
-    ).toBe("custom");
+    ).toBe("lmstudio");
     // vLLM
     expect(detectProviderFromUrl("http://gpu-rig.example.com:8000")).toBe(
-      "custom",
+      "vllm",
     );
     // llama.cpp server
     expect(detectProviderFromUrl("http://llama.example.com:8080")).toBe(
-      "custom",
+      "llamacpp",
     );
   });
 
   it("excludes 172.x outside the RFC1918 range", () => {
-    expect(detectProviderFromUrl("http://172.15.0.1:11434")).toBe("custom"); // port hits
+    expect(detectProviderFromUrl("http://172.15.0.1:11434")).toBe("ollama"); // port hits
     expect(detectProviderFromUrl("http://172.32.0.1:9999")).toBeNull();
   });
 
@@ -72,11 +80,11 @@ describe("detectProviderFromUrl", () => {
 
   it("is case-insensitive", () => {
     expect(detectProviderFromUrl("HTTPS://API.OPENAI.COM")).toBe("openai");
-    expect(detectProviderFromUrl("HTTP://LOCALHOST:11434")).toBe("custom");
+    expect(detectProviderFromUrl("HTTP://LOCALHOST:11434")).toBe("ollama");
   });
 
   it("tolerates bare host:port without a scheme", () => {
-    expect(detectProviderFromUrl("localhost:1234")).toBe("custom");
-    expect(detectProviderFromUrl("192.168.1.10:8080")).toBe("custom");
+    expect(detectProviderFromUrl("localhost:1234")).toBe("lmstudio");
+    expect(detectProviderFromUrl("192.168.1.10:8080")).toBe("llamacpp");
   });
 });

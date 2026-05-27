@@ -158,4 +158,26 @@ describe("setModelConfig — base_url substitution", () => {
       expect(mc.baseUrl).toBe(expected);
     }
   });
+
+  it("writes default base URLs for explicit local providers", async () => {
+    const provider_to_canonical: Record<string, string> = {
+      lmstudio: "http://localhost:1234/v1",
+      ollama: "http://localhost:11434/v1",
+      vllm: "http://localhost:8000/v1",
+      llamacpp: "http://localhost:8080/v1",
+    };
+
+    for (const [provider, expected] of Object.entries(provider_to_canonical)) {
+      rmSync(TEST_DIR, { recursive: true, force: true });
+      mkdirSync(TEST_DIR, { recursive: true });
+
+      const { setModelConfig, getModelConfig } =
+        await importConfigWithHome(TEST_DIR);
+      setModelConfig(provider, "some-local-model", "");
+
+      const mc = getModelConfig();
+      expect(mc.provider).toBe(provider);
+      expect(mc.baseUrl).toBe(expected);
+    }
+  });
 });
