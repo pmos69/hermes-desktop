@@ -14,6 +14,7 @@ import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
 import type { Attachment } from "../shared/attachments";
 import { stageAttachment, clearStagedAttachments } from "./attachment-staging";
+import { persistPromptImageAttachments } from "./session-attachment-store";
 import { discoverProviderModels } from "./model-discovery";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "./media";
 import {
@@ -838,6 +839,11 @@ function setupIPC(): void {
           },
           onDone: (sessionId) => {
             currentChatAbort = null;
+            try {
+              persistPromptImageAttachments(sessionId, message, attachments);
+            } catch (err) {
+              console.warn("[sessions] Failed to persist prompt image attachments:", err);
+            }
             safeSend("chat-done", sessionId || "");
             resolveChat({ response: fullResponse, sessionId });
             // Desktop notification when window is not focused and response took >10s

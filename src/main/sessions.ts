@@ -4,6 +4,11 @@ import { activeStateDbPath } from "./utils";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime } from "../shared/attachments";
 import { removeSessionFromCache } from "./session-cache";
+import {
+  deletePromptImageAttachmentsForSession,
+  loadPromptImageAttachments,
+  stripTrailingImagePlaceholders,
+} from "./session-attachment-store";
 
 // Sentinel prefix used by hermes-agent's hermes_state.py to mark
 // JSON-encoded multimodal content in the messages.content column.
@@ -471,6 +476,27 @@ export function expandRowsToHistory(rows: RawMessageRow[]): HistoryItem[] {
   return items;
 }
 
+export function mergeStoredPromptImageAttachments(
+  items: HistoryItem[],
+  attachmentsByMessageId: Map<number, Attachment[]>,
+): HistoryItem[] {
+  if (attachmentsByMessageId.size === 0) return items;
+
+  return items.map((item) => {
+    if (item.kind !== "user") return item;
+    const stored = attachmentsByMessageId.get(item.id);
+    if (!stored || stored.length === 0) return item;
+    return {
+      ...item,
+      content: stripTrailingImagePlaceholders(item.content),
+      attachments:
+        item.attachments && item.attachments.length > 0
+          ? item.attachments
+          : stored,
+    };
+  });
+}
+
 export function getSessionMessages(sessionId: string): HistoryItem[] {
   const db = getDb();
   if (!db) return [];
@@ -487,7 +513,11 @@ export function getSessionMessages(sessionId: string): HistoryItem[] {
       )
       .all(sessionId) as RawMessageRow[];
 
-    return expandRowsToHistory(rows);
+    const items = expandRowsToHistory(rows);
+    return mergeStoredPromptImageAttachments(
+      items,
+      loadPromptImageAttachments(db, sessionId),
+    );
   } finally {
     db.close();
   }
@@ -499,6 +529,7 @@ export function deleteSession(sessionId: string): void {
 
   try {
     const tx = db.transaction((id: string) => {
+      deletePromptImageAttachmentsForSession(db, id);
       db.prepare("DELETE FROM messages WHERE session_id = ?").run(id);
       db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
     });
