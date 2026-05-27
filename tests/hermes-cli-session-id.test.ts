@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 
-const { spawned, TEST_HOME, healthStatuses, apiBodies } = vi.hoisted(() => {
+const { spawned, TEST_HOME, healthStatuses, apiRequests } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const path = require("path");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -18,7 +18,10 @@ const { spawned, TEST_HOME, healthStatuses, apiBodies } = vi.hoisted(() => {
     >,
     TEST_HOME: path.join(os.tmpdir(), `hermes-cli-session-test-${Date.now()}`),
     healthStatuses: [] as number[],
-    apiBodies: [] as string[],
+    apiRequests: [] as Array<{
+      body: string;
+      headers: Record<string, string>;
+    }>,
   };
 });
 
@@ -50,7 +53,10 @@ vi.mock("http", () => ({
           }
 
           if (_url.endsWith("/v1/chat/completions")) {
-            apiBodies.push(body);
+            apiRequests.push({
+              body,
+              headers: (_options.headers as Record<string, string>) || {},
+            });
             const res = new EventEmitter() as EventEmitter & {
               statusCode: number;
               headers: Record<string, string>;
@@ -166,7 +172,7 @@ import {
 describe("CLI fallback session id propagation", () => {
   beforeEach(() => {
     healthStatuses.length = 0;
-    apiBodies.length = 0;
+    apiRequests.length = 0;
   });
 
   afterEach(() => {
@@ -195,6 +201,48 @@ describe("CLI fallback session id propagation", () => {
     await expect(done).resolves.toBe("20260527_143413_10df4c");
   });
 
+  it("continues a CLI-created timestamp session over the API instead of minting a desk id", async () => {
+    const cliSessionId = "20260527_143413_10df4c";
+    const firstDone = new Promise<string | undefined>((resolve) => {
+      sendMessage("hi", {
+        onChunk: () => {},
+        onDone: resolve,
+        onError: () => {},
+      }).then(() => {
+        const proc = spawned[0];
+        proc.stdout.emit("data", Buffer.from("Hi there"));
+        proc.stderr.emit("data", Buffer.from(`\nsession_id: ${cliSessionId}\n`));
+        proc.emit("close", 0);
+      });
+    });
+
+    await expect(firstDone).resolves.toBe(cliSessionId);
+
+    healthStatuses.push(200);
+    await expect(
+      new Promise<string | undefined>((resolve, reject) => {
+        sendMessage(
+          "what time is it?",
+          {
+            onChunk: () => {},
+            onDone: resolve,
+            onError: reject,
+          },
+          undefined,
+          cliSessionId,
+        ).catch(reject);
+      }),
+    ).resolves.toBe("desk-cold-gateway");
+
+    expect(apiRequests).toHaveLength(1);
+    expect(apiRequests[0].headers["X-Hermes-Session-Id"]).toBe(cliSessionId);
+    expect(JSON.parse(apiRequests[0].body)).toMatchObject({
+      session_id: cliSessionId,
+      messages: [{ role: "user", content: "what time is it?" }],
+      stream: true,
+    });
+  });
+
   it("waits for a cold gateway to become API-ready instead of falling back to CLI", async () => {
     healthStatuses.push(503, 200);
 
@@ -213,8 +261,8 @@ describe("CLI fallback session id propagation", () => {
     await expect(done).resolves.toBe("desk-cold-gateway");
     expect(chunks.join("")).toBe("Hi from API");
     expect(spawned).toHaveLength(1);
-    expect(apiBodies).toHaveLength(1);
-    expect(JSON.parse(apiBodies[0])).toMatchObject({
+    expect(apiRequests).toHaveLength(1);
+    expect(JSON.parse(apiRequests[0].body)).toMatchObject({
       messages: [{ role: "user", content: "hi" }],
       stream: true,
     });
@@ -232,7 +280,7 @@ describe("CLI fallback session id propagation", () => {
         }).catch(reject);
       }),
     ).resolves.toBe("desk-cold-gateway");
-    expect(apiBodies).toHaveLength(1);
+    expect(apiRequests).toHaveLength(1);
 
     expect(startGateway()).toBe(true);
     expect(spawned).toHaveLength(1);
@@ -251,8 +299,8 @@ describe("CLI fallback session id propagation", () => {
 
     expect(chunks.join("")).toBe("Hi from API");
     expect(spawned).toHaveLength(1);
-    expect(apiBodies).toHaveLength(2);
-    expect(JSON.parse(apiBodies[1])).toMatchObject({
+    expect(apiRequests).toHaveLength(2);
+    expect(JSON.parse(apiRequests[1].body)).toMatchObject({
       messages: [{ role: "user", content: "hi after restart" }],
       stream: true,
     });
