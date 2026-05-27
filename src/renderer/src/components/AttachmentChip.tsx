@@ -1,5 +1,6 @@
 import { FileText, X } from "lucide-react";
 import type { Attachment } from "../../../shared/attachments";
+import { useI18n } from "./useI18n";
 
 interface AttachmentChipProps {
   attachment: Attachment;
@@ -14,7 +15,16 @@ export function AttachmentChip({
   onRemove,
   onPreview,
 }: AttachmentChipProps): React.JSX.Element {
+  const { t } = useI18n();
   const isImage = attachment.kind === "image";
+  const showImageMenu = (event: React.MouseEvent): void => {
+    if (!isImage || !attachment.dataUrl) return;
+    event.preventDefault();
+    window.hermesAPI.showMediaMenu(attachment.dataUrl, attachment.name, {
+      open: t("chat.media.open"),
+      saveAs: t("chat.media.saveAs"),
+    });
+  };
 
   return (
     <div
@@ -26,6 +36,7 @@ export function AttachmentChip({
           type="button"
           className="attachment-chip-thumb"
           onClick={() => onPreview?.(attachment)}
+          onContextMenu={showImageMenu}
           aria-label={attachment.name}
         >
           <img src={attachment.dataUrl} alt={attachment.name} />

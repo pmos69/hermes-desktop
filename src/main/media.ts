@@ -8,12 +8,14 @@
 
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
   writeFileSync,
   copyFileSync,
   statSync,
 } from "fs";
-import { extname } from "path";
+import { join, extname } from "path";
+import { tmpdir } from "os";
 import { BrowserWindow, dialog } from "electron";
 
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
@@ -28,6 +30,51 @@ const MIME_BY_EXT: Record<string, string> = {
   ".bmp": "image/bmp",
   ".avif": "image/avif",
 };
+
+const EXT_BY_MIME: Record<string, string> = Object.fromEntries(
+  Object.entries(MIME_BY_EXT).map(([ext, mime]) => [mime, ext]),
+);
+
+function sanitizeFilename(name: string): string {
+  const cleaned = (name || "image")
+    .replace(/[\x00-\x1F<>:"/\\|?*]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/\.{2,}/g, ".")
+    .trim();
+  return (cleaned || "image").slice(0, 160);
+}
+
+function decodeDataUrl(src: string): { mime: string; buffer: Buffer } | null {
+  const match = /^data:([^;,]+);base64,(.*)$/s.exec(src || "");
+  if (!match) return null;
+  const mime = match[1].toLowerCase();
+  const buffer = Buffer.from(match[2], "base64");
+  if (buffer.length <= 0 || buffer.length > MAX_MEDIA_BYTES) return null;
+  return { mime, buffer };
+}
+
+export function materializeDataUrlToTemp(
+  src: string,
+  suggestedName: string,
+): string | null {
+  try {
+    const decoded = decodeDataUrl(src);
+    if (!decoded) return null;
+
+    const dir = join(tmpdir(), "hermes-desktop-media");
+    mkdirSync(dir, { recursive: true });
+
+    let filename = sanitizeFilename(suggestedName);
+    if (!extname(filename)) {
+      filename += EXT_BY_MIME[decoded.mime] || ".bin";
+    }
+    const target = join(dir, `${Date.now()}-${filename}`);
+    writeFileSync(target, decoded.buffer);
+    return target;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Read a local image file and return it as a `data:` URL. Returns null when
@@ -78,9 +125,9 @@ export async function saveMedia(
     const dest = result.filePath;
 
     if (src.startsWith("data:")) {
-      const comma = src.indexOf(",");
-      if (comma === -1) return false;
-      writeFileSync(dest, Buffer.from(src.slice(comma + 1), "base64"));
+      const decoded = decodeDataUrl(src);
+      if (!decoded) return false;
+      writeFileSync(dest, decoded.buffer);
       return true;
     }
 

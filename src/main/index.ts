@@ -16,7 +16,12 @@ import type { Attachment } from "../shared/attachments";
 import { stageAttachment, clearStagedAttachments } from "./attachment-staging";
 import { persistPromptImageAttachments } from "./session-attachment-store";
 import { discoverProviderModels } from "./model-discovery";
-import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "./media";
+import {
+  materializeDataUrlToTemp,
+  readMediaAsDataUrl,
+  saveMedia,
+  mediaFileExists,
+} from "./media";
 import {
   checkInstallStatus,
   verifyInstall,
@@ -935,23 +940,21 @@ function setupIPC(): void {
       const isUrl = /^https?:\/\//i.test(src);
       const isData = src.startsWith("data:");
       const template: Electron.MenuItemConstructorOptions[] = [];
-      // "Open" needs a real target — a local file or a web URL. A data:
-      // URL is inline bytes with nothing to hand to the OS, so it is
-      // save-only.
-      if (!isData) {
-        template.push({
-          label: labels.open,
-          click: () => {
-            if (isUrl) {
-              openExternalUrl(src);
-            } else {
-              shell.openPath(src).then((err) => {
-                if (err) console.error("[media] open failed:", err);
-              });
-            }
-          },
-        });
-      }
+      template.push({
+        label: labels.open,
+        click: () => {
+          if (isUrl) {
+            openExternalUrl(src);
+            return;
+          }
+
+          const target = isData ? materializeDataUrlToTemp(src, name) : src;
+          if (!target) return;
+          shell.openPath(target).then((err) => {
+            if (err) console.error("[media] open failed:", err);
+          });
+        },
+      });
       template.push({
         label: labels.saveAs,
         click: () => {
