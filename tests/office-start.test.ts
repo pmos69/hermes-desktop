@@ -64,6 +64,10 @@ function makeDeps(
       calls.push("startClaw3dAll");
       return { success: true };
     },
+    waitForClaw3dReady: async () => {
+      calls.push("waitForClaw3dReady");
+      return true;
+    },
     ...overrides,
   };
   return { calls, deps };
@@ -76,7 +80,11 @@ describe("startOfficeStack", () => {
     const result = await startOfficeStack("research", deps);
 
     expect(result).toEqual({ success: true });
-    expect(calls).toEqual(["startGateway:research", "startClaw3dAll"]);
+    expect(calls).toEqual([
+      "startGateway:research",
+      "startClaw3dAll",
+      "waitForClaw3dReady",
+    ]);
   });
 
   it("does not restart a local gateway that is already running", async () => {
@@ -87,7 +95,7 @@ describe("startOfficeStack", () => {
     const result = await startOfficeStack("research", deps);
 
     expect(result).toEqual({ success: true });
-    expect(calls).toEqual(["startClaw3dAll"]);
+    expect(calls).toEqual(["startClaw3dAll", "waitForClaw3dReady"]);
   });
 
   it("starts the SSH gateway and tunnel before Claw3D", async () => {
@@ -101,6 +109,28 @@ describe("startOfficeStack", () => {
       "startSshTunnel",
       "setSshRemoteApiKey:remote-key",
       "startClaw3dAll",
+    ]);
+  });
+
+  it("returns an error when local Office does not become ready", async () => {
+    const { calls, deps } = makeDeps(localConnection(), {
+      waitForClaw3dReady: async () => {
+        calls.push("waitForClaw3dReady");
+        return false;
+      },
+    });
+
+    const result = await startOfficeStack("research", deps);
+
+    expect(result).toEqual({
+      success: false,
+      error:
+        "Office started but did not become ready in time. Check Office logs and try again.",
+    });
+    expect(calls).toEqual([
+      "startGateway:research",
+      "startClaw3dAll",
+      "waitForClaw3dReady",
     ]);
   });
 });

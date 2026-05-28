@@ -12,6 +12,7 @@ export interface OfficeStartDependencies {
   sshReadRemoteApiKey: (config: SshConnectionConfig) => Promise<string>;
   setSshRemoteApiKey: (key: string) => void;
   startClaw3dAll: () => StartResult;
+  waitForClaw3dReady: () => Promise<boolean>;
 }
 
 function errorMessage(error: unknown): string {
@@ -35,7 +36,18 @@ export async function startOfficeStack(
       deps.startGateway(profile);
     }
 
-    return deps.startClaw3dAll();
+    const result = deps.startClaw3dAll();
+    if (!result.success) return result;
+
+    if (conn.mode === "local" && !(await deps.waitForClaw3dReady())) {
+      return {
+        success: false,
+        error:
+          "Office started but did not become ready in time. Check Office logs and try again.",
+      };
+    }
+
+    return result;
   } catch (error) {
     return { success: false, error: errorMessage(error) };
   }

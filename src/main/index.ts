@@ -78,6 +78,7 @@ import {
   getClaw3dPort,
   setClaw3dWsUrl,
   getClaw3dWsUrl,
+  waitForClaw3dReady,
   Claw3dSetupProgress,
 } from "./claw3d";
 import { startOfficeStack } from "./office-start";
@@ -1342,6 +1343,7 @@ function setupIPC(): void {
       sshReadRemoteApiKey,
       setSshRemoteApiKey,
       startClaw3dAll,
+      waitForClaw3dReady,
     }),
   );
   ipcMain.handle("claw3d-stop-all", () => {

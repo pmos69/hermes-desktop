@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Refresh, ExternalLink, Settings } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import { buildOfficeWebviewUrl } from "./officeUrl";
 
 type OfficeState =
   | "checking"
@@ -45,6 +46,7 @@ function Office({
   });
   const [webviewReady, setWebviewReady] = useState(false);
   const [webviewError, setWebviewError] = useState("");
+  const [webviewInstanceKey, setWebviewInstanceKey] = useState(0);
   // Set when the main process detects a Claw3D / hermes-office service
   // running on the remote host (SSH tunnel mode). When present the webview
   // points at this URL and the local install/start UX is bypassed.
@@ -193,20 +195,21 @@ function Office({
       setRunning(false);
       setWebviewReady(false);
       setWebviewError("");
+      setWebviewInstanceKey((key) => key + 1);
       setError("");
     } else {
       setError("");
       setWebviewError("");
+      setWebviewReady(false);
       setStarting(true);
       const result = await window.hermesAPI.claw3dStartAll(profile);
       if (!result.success) {
         setError(result.error || "Failed to start Claw3D");
         setStarting(false);
       } else {
-        // Give processes a moment to actually start, polling will confirm
-        setTimeout(() => {
-          setRunning(true);
-        }, 2000);
+        setWebviewInstanceKey((key) => key + 1);
+        setRunning(true);
+        setStarting(false);
       }
     }
   }
@@ -246,7 +249,7 @@ function Office({
   // Remote Claw3D (SSH tunnel mode) takes precedence: the remote
   // hermes-office.service already runs, so we point the webview at it
   // rather than asking the user to install Claw3D locally.
-  const claw3dUrl = remoteUrl || `http://localhost:${port}`;
+  const claw3dUrl = buildOfficeWebviewUrl(remoteUrl, port);
 
   // --- Checking ---
   if (state === "checking") {
@@ -496,6 +499,7 @@ function Office({
               </div>
             )}
             <webview
+              key={`${claw3dUrl}-${webviewInstanceKey}`}
               ref={webviewRef as React.RefObject<HTMLWebViewElement>}
               src={claw3dUrl}
               style={{ width: "100%", height: "100%", border: "none" }}

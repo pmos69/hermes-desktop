@@ -273,12 +273,42 @@ export function buildOfficeEnv(opts: {
     `NEXT_PUBLIC_GATEWAY_URL=${opts.url}`,
     `CLAW3D_GATEWAY_URL=${opts.url}`,
     `CLAW3D_GATEWAY_TOKEN=${opts.apiKey}`,
+    `CLAW3D_GATEWAY_ADAPTER_TYPE=hermes`,
     `HERMES_API_KEY=${opts.apiKey}`,
     `HERMES_ADAPTER_PORT=18789`,
     `HERMES_MODEL=${opts.model || "hermes"}`,
     `HERMES_AGENT_NAME=Hermes`,
     "",
   ].join("\n");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+export function buildOfficeSettings(
+  existing: Record<string, unknown>,
+  opts: { url: string; apiKey: string },
+): Record<string, unknown> {
+  const existingGateway = isRecord(existing.gateway) ? existing.gateway : {};
+  return {
+    ...existing,
+    // Keep the legacy top-level fields for older Office builds and rollback.
+    adapter: "hermes",
+    url: opts.url,
+    token: opts.apiKey,
+    gateway: {
+      ...existingGateway,
+      url: opts.url,
+      token: opts.apiKey,
+      adapterType: "hermes",
+      lastKnownGood: {
+        url: opts.url,
+        token: opts.apiKey,
+        adapterType: "hermes",
+      },
+    },
+  };
 }
 
 /**
@@ -303,12 +333,7 @@ function writeClaw3dSettings(wsUrl?: string): void {
       /* fresh */
     }
 
-    const settings = {
-      ...existing,
-      adapter: "hermes",
-      url,
-      token: apiKey,
-    };
+    const settings = buildOfficeSettings(existing, { url, apiKey });
     safeWriteFile(settingsPath, JSON.stringify(settings, null, 2));
   } catch {
     /* non-fatal */
@@ -445,6 +470,24 @@ function probeHttp(url: string, timeoutMs = 1500): Promise<boolean> {
     });
     req.end();
   });
+}
+
+export async function waitForClaw3dReady(
+  timeoutMs = 45000,
+  intervalMs = 1000,
+): Promise<boolean> {
+  const port = getSavedPort();
+  const url = `http://127.0.0.1:${port}/office`;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (await probeHttp(url, Math.min(intervalMs, 2000))) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  return false;
 }
 
 export async function getClaw3dStatus(): Promise<Claw3dStatus> {
