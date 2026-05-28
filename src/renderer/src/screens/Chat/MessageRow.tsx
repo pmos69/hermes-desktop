@@ -1,11 +1,11 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo } from "react";
 import icon from "../../assets/icon.png";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { MediaSegmentView } from "../../components/MediaImage";
 import { useI18n } from "../../components/useI18n";
 import { parseMediaTokens } from "./mediaUtils";
-import type { Attachment, ChatBubbleMessage, ChatMessage } from "./types";
+import type { ChatBubbleMessage, ChatMessage } from "./types";
 
 export const APPROVAL_RE =
   /⚠️.*dangerous|requires? (your )?approval|\/approve.*\/deny|do you want (me )?to (proceed|continue|run|execute)/i;
@@ -46,9 +46,6 @@ export const MessageRow = memo(function MessageRow({
   onDeny,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
-  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(
-    null,
-  );
 
   // MessageRow is wrapped in memo() but still re-renders on any prop change
   // (e.g. isLoading toggling at the end of a stream), and `parseMediaTokens`
@@ -98,11 +95,7 @@ export const MessageRow = memo(function MessageRow({
         {hasAttachments && (
           <div className="chat-message-attachments">
             {msg.attachments!.map((att) => (
-              <AttachmentChip
-                key={att.id}
-                attachment={att}
-                onPreview={(a) => a.kind === "image" && setPreviewAttachment(a)}
-              />
+              <AttachmentChip key={att.id} attachment={att} />
             ))}
           </div>
         )}
@@ -142,21 +135,6 @@ export const MessageRow = memo(function MessageRow({
           <button className="chat-approval-btn chat-deny" onClick={onDeny}>
             {t("chat.deny")}
           </button>
-        </div>
-      )}
-      {previewAttachment && previewAttachment.dataUrl && (
-        <div
-          className="chat-image-preview-backdrop"
-          onClick={() => setPreviewAttachment(null)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <img
-            src={previewAttachment.dataUrl}
-            alt={previewAttachment.name}
-            className="chat-image-preview-image"
-            onClick={(e) => e.stopPropagation()}
-          />
         </div>
       )}
     </div>
