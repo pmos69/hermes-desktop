@@ -31,6 +31,7 @@ describe("expectedEnvKeyForModel — provider-name lookup", () => {
     ["minimax", "MINIMAX_API_KEY"],
     ["glm", "GLM_API_KEY"],
     ["kimi", "KIMI_API_KEY"],
+    ["xiaomi", "XIAOMI_API_KEY"],
   ])("maps provider %s → %s", (provider, expected) => {
     expect(expectedEnvKeyForModel(provider, "")).toBe(expected);
   });
@@ -56,6 +57,9 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(
       expectedEnvKeyForModel("custom", "https://openrouter.ai/api/v1"),
     ).toBe("OPENROUTER_API_KEY");
+    expect(
+      expectedEnvKeyForModel("custom", "https://api.xiaomimimo.com/v1"),
+    ).toBe("XIAOMI_API_KEY");
   });
 
   it("recognizes a known endpoint when provider is 'auto'", () => {

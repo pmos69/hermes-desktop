@@ -26,6 +26,7 @@ describe("PROVIDERS", () => {
     expect(values).toContain("openai-codex");
     expect(values).toContain("google");
     expect(values).toContain("xai");
+    expect(values).toContain("xiaomi");
     expect(values).toContain("nous");
     expect(values).toContain("qwen");
     expect(values).toContain("minimax");
@@ -180,6 +181,7 @@ describe("SETTINGS_SECTIONS", () => {
     const allKeys = SETTINGS_SECTIONS.flatMap((s) => s.items.map((i) => i.key));
     expect(allKeys).toContain("GOOGLE_API_KEY");
     expect(allKeys).toContain("XAI_API_KEY");
+    expect(allKeys).toContain("XIAOMI_API_KEY");
   });
 
   it("includes existing keys (backward compat)", () => {

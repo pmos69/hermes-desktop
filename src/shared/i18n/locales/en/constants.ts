@@ -89,6 +89,8 @@ export default {
   googleHint: "Direct access to Gemini models",
   xaiApiKey: "xAI (Grok) API Key",
   xaiHint: "Direct access to Grok models",
+  xiaomiApiKey: "Xiaomi MiMo API Key",
+  xiaomiHint: "Direct access to MiMo models",
   exaApiKey: "Exa Search API Key",
   exaHint: "AI-native web search",
   parallelApiKey: "Parallel API Key",

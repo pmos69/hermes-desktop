@@ -100,6 +100,34 @@ describe("model-discovery", () => {
     expect(result.models).toEqual([]);
   });
 
+  it("uses the Xiaomi MiMo env key for first-class xiaomi discovery", async () => {
+    let receivedAuth = "";
+    server = http.createServer((req, res) => {
+      receivedAuth = String(req.headers["authorization"] || "");
+      if (req.url === "/v1/models" && req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ data: [{ id: "mimo-v2.5-pro" }] }));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await listen();
+    writeFileSync(join(testHome, ".env"), "XIAOMI_API_KEY=sk-mimo-test\n");
+
+    const { discoverProviderModels } = await loadDiscovery();
+    const result = await discoverProviderModels(
+      "xiaomi",
+      baseUrl,
+      undefined,
+      undefined,
+    );
+
+    expect(receivedAuth).toBe("Bearer sk-mimo-test");
+    expect(result.status).toBe("ok");
+    expect(result.models).toEqual(["mimo-v2.5-pro"]);
+  });
+
   it("returns status=unsupported for known no-discovery providers", async () => {
     const { discoverProviderModels } = await loadDiscovery();
     // openai-codex / qwen-oauth / nous are no longer here — OAuth

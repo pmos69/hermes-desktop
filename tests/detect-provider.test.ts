@@ -19,6 +19,9 @@ describe("detectProviderFromUrl", () => {
       detectProviderFromUrl("https://generativelanguage.googleapis.com/v1beta"),
     ).toBe("google");
     expect(detectProviderFromUrl("https://api.x.ai/v1")).toBe("xai");
+    expect(detectProviderFromUrl("https://api.xiaomimimo.com/v1")).toBe(
+      "xiaomi",
+    );
     expect(
       detectProviderFromUrl("https://inference-api.nousresearch.com/v1"),
     ).toBe("nous");

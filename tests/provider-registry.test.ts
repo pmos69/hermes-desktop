@@ -16,6 +16,9 @@ describe("provider-registry", () => {
       expect(canonicalProviderBaseUrl("mistral")).toBe(
         "https://api.mistral.ai/v1",
       );
+      expect(canonicalProviderBaseUrl("xiaomi")).toBe(
+        "https://api.xiaomimimo.com/v1",
+      );
       expect(canonicalProviderBaseUrl("together")).toBe(
         "https://api.together.xyz/v1",
       );
@@ -72,6 +75,7 @@ describe("provider-registry", () => {
         "fireworks",
         "cerebras",
         "mistral",
+        "xiaomi",
       ];
       for (const provider of requiredBuiltins) {
         expect(PROVIDER_BASE_URLS[provider]).toBeTruthy();

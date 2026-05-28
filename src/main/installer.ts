@@ -300,6 +300,7 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   glm: "GLM_API_KEY",
   kimi: "KIMI_API_KEY",
   nvidia: "NVIDIA_API_KEY",
+  xiaomi: "XIAOMI_API_KEY",
 };
 
 // When provider is "custom" or "auto", the desktop's setup flow falls
@@ -317,6 +318,7 @@ const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
   [/api\.cerebras\.ai/i, "CEREBRAS_API_KEY"],
   [/api\.mistral\.ai/i, "MISTRAL_API_KEY"],
   [/api\.perplexity\.ai/i, "PERPLEXITY_API_KEY"],
+  [/api\.xiaomimimo\.com/i, "XIAOMI_API_KEY"],
 ];
 
 /**

@@ -48,6 +48,7 @@ function Setup({
     if (/api\.cerebras\.ai/i.test(url)) return "CEREBRAS_API_KEY";
     if (/api\.mistral\.ai/i.test(url)) return "MISTRAL_API_KEY";
     if (/api\.perplexity\.ai/i.test(url)) return "PERPLEXITY_API_KEY";
+    if (/api\.xiaomimimo\.com/i.test(url)) return "XIAOMI_API_KEY";
     return "CUSTOM_API_KEY";
   }
 

@@ -168,6 +168,7 @@ const URL_KEY_MAP: Array<{ pattern: RegExp; envKey: string }> = [
   { pattern: /api\.cerebras\.ai/i, envKey: "CEREBRAS_API_KEY" },
   { pattern: /api\.mistral\.ai/i, envKey: "MISTRAL_API_KEY" },
   { pattern: /api\.perplexity\.ai/i, envKey: "PERPLEXITY_API_KEY" },
+  { pattern: /api\.xiaomimimo\.com/i, envKey: "XIAOMI_API_KEY" },
 ];
 
 interface ChatHandle {
@@ -772,6 +773,7 @@ function sendMessageViaCli(
     "CEREBRAS_API_KEY",
     "MISTRAL_API_KEY",
     "PERPLEXITY_API_KEY",
+    "XIAOMI_API_KEY",
     "GLM_API_KEY",
     "KIMI_API_KEY",
     "MINIMAX_API_KEY",

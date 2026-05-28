@@ -143,6 +143,7 @@ describe("setModelConfig — base_url substitution", () => {
       together: "https://api.together.xyz/v1",
       fireworks: "https://api.fireworks.ai/inference/v1",
       cerebras: "https://api.cerebras.ai/v1",
+      xiaomi: "https://api.xiaomimimo.com/v1",
     };
 
     for (const [provider, expected] of Object.entries(provider_to_canonical)) {
