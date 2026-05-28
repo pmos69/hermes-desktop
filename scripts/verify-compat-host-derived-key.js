@@ -2,89 +2,92 @@
  * Live-verify the dual-engine compat fix for host-derived <VENDOR>_API_KEY.
  *
  * Two paths needed compat:
- *   1. CLI runtime spawn (`sendMessageViaCli`) — writes both
- *      OPENAI_API_KEY (old engine) and <VENDOR>_API_KEY (new engine) into
- *      the child process env at chat-send time.
- *   2. Gateway persistence (`models.ts::seedDefaults`) — writes both
- *      CUSTOM_PROVIDER_<NAME>_KEY (historical) and <VENDOR>_API_KEY
- *      (new engine) into ~/.hermes/.env so the long-running gateway,
- *      which only sees .env at startGateway time, has the right key.
+ *   1. CLI runtime spawn (`sendMessageViaCli`) writes both OPENAI_API_KEY
+ *      (old engine) and <VENDOR>_API_KEY (new engine) into the child env.
+ *   2. Gateway persistence (`models.ts::seedDefaults`) writes both
+ *      CUSTOM_PROVIDER_<NAME>_KEY and <VENDOR>_API_KEY into .env so the
+ *      long-running gateway can resolve custom provider keys from .env.
  *
- * This script verifies (2) by:
- *   - Appending a custom_providers entry to the active HERMES_HOME's
- *     config.yaml (api.deepseek.com with a fake key)
- *   - Triggering listModels() via IPC (causes seedDefaults to run)
- *   - Reading .env back and asserting BOTH env-var names are present
+ * This script verifies (2) against a running dev Electron instance. It
+ * snapshots config.yaml, .env, and models.json and restores them exactly
+ * in a finally block, because it intentionally forces a model re-seed.
  *
- * (1) is covered by `tests/compat-host-derived-key.test.ts` (URL → envvar
- * mapping) — the call-site uses the same helper.
- *
- * Run against both engines:
- *   $env:HERMES_HOME="$env:LocalAppData\hermes-oldengine"; $env:ENABLE_CDP=1; npm run dev
- *   node scripts/verify-compat-host-derived-key.js
- *   # then restart with HERMES_HOME=hermes-newengine and re-run.
+ * Example:
+ *   $env:ENABLE_CDP="1"; $env:CDP_PORT="9337"; npm run dev
+ *   $env:CDP_PORT="9337"; node scripts/verify-compat-host-derived-key.js
  */
 
-const { chromium } = require("playwright");
 const fs = require("fs");
 const path = require("path");
+const { attach } = require("./e2e-attach");
 
 const FAKE_KEY = "sk-fake-deepseek-compat-test-12345";
 const PROVIDER_NAME = "CompatTestDeepseek";
 const BASE_URL = "https://api.deepseek.com/v1";
 
-async function attach() {
-  const cdpUrl = `http://127.0.0.1:${process.env.CDP_PORT || "9222"}`;
-  const browser = await chromium.connectOverCDP(cdpUrl);
-  const page = browser.contexts()[0].pages()[0];
-  return { browser, page };
+function snapshotFile(file) {
+  if (!fs.existsSync(file)) return { exists: false, content: "" };
+  return { exists: true, content: fs.readFileSync(file, "utf-8") };
+}
+
+function restoreFile(file, snapshot) {
+  if (snapshot.exists) {
+    fs.writeFileSync(file, snapshot.content);
+  } else if (fs.existsSync(file)) {
+    fs.unlinkSync(file);
+  }
 }
 
 (async () => {
-  const { browser, page } = await attach();
+  let browser;
+  let page;
+  let cfgFile;
+  let envFile;
+  let modelsFile;
+  let cfgOriginal;
+  let envOriginal;
+  let modelsOriginal;
 
-  // Phase A — observe HERMES_HOME + engine version
-  const home = await page.evaluate(
-    async () => await window.hermesAPI.getHermesHome(),
-  );
-  const engine = await page.evaluate(
-    async () => await window.hermesAPI.getHermesVersion(),
-  );
-  console.log("HERMES_HOME:", home);
-  console.log("Engine:    ", engine);
-  const flavor = home.toLowerCase().includes("hermes-oldengine")
-    ? "OLD"
-    : home.toLowerCase().includes("hermes-newengine")
-      ? "NEW"
-      : "DEFAULT";
-  console.log("Test leg:  ", flavor);
+  try {
+    ({ browser, page } = await attach({ titleHint: "Hermes" }));
 
-  const cfgFile = path.join(home, "config.yaml");
-  const envFile = path.join(home, ".env");
-
-  // Phase A2 — snapshot original .env so we can restore on teardown, then
-  // strip any pre-existing DEEPSEEK_API_KEY so we can observe the fix
-  // writing one. The fix's "don't overwrite existing host-derived key"
-  // behaviour is correct (a real user key shouldn't be clobbered by a
-  // custom-provider seed) but it makes the test unobservable when the
-  // copied-from-user config already had DEEPSEEK_API_KEY.
-  const envOriginal = fs.existsSync(envFile)
-    ? fs.readFileSync(envFile, "utf-8")
-    : "";
-  const envWithoutHostKey = envOriginal
-    .split("\n")
-    .filter((l) => !l.startsWith("DEEPSEEK_API_KEY="))
-    .join("\n");
-  if (envWithoutHostKey !== envOriginal) {
-    fs.writeFileSync(envFile, envWithoutHostKey);
-    console.log(
-      "[A2] Stripped pre-existing DEEPSEEK_API_KEY so the fix's write is observable",
+    // Phase A - observe HERMES_HOME + engine version.
+    const home = await page.evaluate(
+      async () => await window.hermesAPI.getHermesHome(),
     );
-  }
+    const engine = await page.evaluate(
+      async () => await window.hermesAPI.getHermesVersion(),
+    );
+    console.log("HERMES_HOME:", home);
+    console.log("Engine:    ", engine);
+    const flavor = home.toLowerCase().includes("hermes-oldengine")
+      ? "OLD"
+      : home.toLowerCase().includes("hermes-newengine")
+        ? "NEW"
+        : "DEFAULT";
+    console.log("Test leg:  ", flavor);
 
-  // Phase B — append custom_providers entry to config.yaml (if not present)
-  const cfg = fs.existsSync(cfgFile) ? fs.readFileSync(cfgFile, "utf-8") : "";
-  if (!cfg.includes(PROVIDER_NAME)) {
+    cfgFile = path.join(home, "config.yaml");
+    envFile = path.join(home, ".env");
+    modelsFile = path.join(home, "models.json");
+    cfgOriginal = snapshotFile(cfgFile);
+    envOriginal = snapshotFile(envFile);
+    modelsOriginal = snapshotFile(modelsFile);
+
+    // Phase A2 - strip any pre-existing DEEPSEEK_API_KEY so the test can
+    // observe the fix writing one, then restore the exact original later.
+    const envBefore = envOriginal.exists ? envOriginal.content : "";
+    const envWithoutHostKey = envBefore
+      .split("\n")
+      .filter((line) => !line.startsWith("DEEPSEEK_API_KEY="))
+      .join("\n");
+    if (envWithoutHostKey !== envBefore) {
+      fs.writeFileSync(envFile, envWithoutHostKey);
+      console.log("[A2] Stripped pre-existing DEEPSEEK_API_KEY for observability");
+    }
+
+    // Phase B - append a custom provider entry to config.yaml.
+    const cfg = cfgOriginal.exists ? cfgOriginal.content : "";
     const append =
       "\ncustom_providers:\n" +
       `  - name: "${PROVIDER_NAME}"\n` +
@@ -92,86 +95,75 @@ async function attach() {
       `    base_url: "${BASE_URL}"\n` +
       `    api_key: "${FAKE_KEY}"\n`;
     fs.writeFileSync(cfgFile, cfg + append);
-    console.log("[B] Appended custom_providers entry to config.yaml");
-  } else {
-    console.log("[B] config.yaml already has", PROVIDER_NAME, "— continuing");
-  }
+    console.log("[B] Appended temporary custom provider to config.yaml");
 
-  // Phase C — force a fresh seedDefaults so .env gets re-persisted.
-  // The desktop seeds when listModels has no models.json. Easiest:
-  // delete models.json, then list.
-  const modelsFile = path.join(home, "models.json");
-  if (fs.existsSync(modelsFile)) {
-    fs.unlinkSync(modelsFile);
-    console.log("[C] Deleted models.json to force re-seed");
-  }
-  const listed = await page.evaluate(
-    async () => await window.hermesAPI.listModels(),
-  );
-  const found = listed.find((m) => m.name === PROVIDER_NAME);
-  console.log(
-    "[C] listModels picked up entry:",
-    found ? `id=${found.id}, baseUrl=${found.baseUrl}` : "✗ MISSING",
-  );
-
-  // Phase D — read .env and assert both env-var names are written
-  const envContent = fs.existsSync(envFile) ? fs.readFileSync(envFile, "utf-8") : "";
-  const customPrefixKey = `CUSTOM_PROVIDER_${PROVIDER_NAME.toUpperCase()}_KEY`;
-  const hasCustomPrefix = new RegExp(`^${customPrefixKey}=${FAKE_KEY}$`, "m").test(
-    envContent,
-  );
-  const hasHostDerived = new RegExp(`^DEEPSEEK_API_KEY=${FAKE_KEY}$`, "m").test(
-    envContent,
-  );
-
-  console.log("\n[D] .env contents (relevant lines):");
-  for (const line of envContent.split("\n")) {
-    if (/DEEPSEEK|CUSTOM_PROVIDER_COMPAT/.test(line)) {
-      console.log("  ", line);
+    // Phase C - force a fresh seedDefaults so .env gets re-persisted.
+    if (fs.existsSync(modelsFile)) {
+      fs.unlinkSync(modelsFile);
+      console.log("[C] Temporarily deleted models.json to force re-seed");
     }
+    const listed = await page.evaluate(
+      async () => await window.hermesAPI.listModels(),
+    );
+    const found = listed.find((model) => model.name === PROVIDER_NAME);
+    console.log(
+      "[C] listModels picked up entry:",
+      found ? `id=${found.id}, baseUrl=${found.baseUrl}` : "MISSING",
+    );
+
+    // Phase D - read .env and assert both env-var names are written.
+    const envContent = fs.existsSync(envFile)
+      ? fs.readFileSync(envFile, "utf-8")
+      : "";
+    const customPrefixKey = `CUSTOM_PROVIDER_${PROVIDER_NAME.toUpperCase()}_KEY`;
+    const hasCustomPrefix = new RegExp(
+      `^${customPrefixKey}=${FAKE_KEY}$`,
+      "m",
+    ).test(envContent);
+    const hasHostDerived = new RegExp(
+      `^DEEPSEEK_API_KEY=${FAKE_KEY}$`,
+      "m",
+    ).test(envContent);
+
+    console.log("\n[D] .env contents (relevant lines):");
+    for (const line of envContent.split("\n")) {
+      if (/DEEPSEEK|CUSTOM_PROVIDER_COMPAT/.test(line)) {
+        console.log("  ", line);
+      }
+    }
+
+    console.log("\n=== VERDICT ===");
+    console.log(
+      `  ${customPrefixKey}=${FAKE_KEY}: ${hasCustomPrefix ? "PASS" : "FAIL"}`,
+    );
+    console.log(
+      `  DEEPSEEK_API_KEY=${FAKE_KEY}:                ${hasHostDerived ? "PASS" : "FAIL"}`,
+    );
+    if (hasCustomPrefix && hasHostDerived) {
+      console.log(
+        `\nPASS (${flavor} engine): both env-var names persisted to .env.`,
+      );
+    } else if (hasCustomPrefix && !hasHostDerived) {
+      console.log(
+        `\nFAIL (${flavor} engine): only the custom-prefix form was persisted.`,
+      );
+      process.exitCode = 1;
+    } else {
+      console.log(
+        `\nFAIL (${flavor} engine): missing one or both env-var names.`,
+      );
+      process.exitCode = 2;
+    }
+  } catch (error) {
+    console.error("ERROR:", error.message || error);
+    process.exitCode = 3;
+  } finally {
+    if (cfgFile && cfgOriginal) restoreFile(cfgFile, cfgOriginal);
+    if (envFile && envOriginal) restoreFile(envFile, envOriginal);
+    if (modelsFile && modelsOriginal) restoreFile(modelsFile, modelsOriginal);
+    if (cfgFile) {
+      console.log("\n[E] Restored original config.yaml, .env, and models.json");
+    }
+    if (browser) await browser.close();
   }
-
-  console.log("\n=== VERDICT ===");
-  console.log(`  ${customPrefixKey}=${FAKE_KEY}: ${hasCustomPrefix ? "✓" : "✗"}`);
-  console.log(`  DEEPSEEK_API_KEY=${FAKE_KEY}:                ${hasHostDerived ? "✓" : "✗"}`);
-  if (hasCustomPrefix && hasHostDerived) {
-    console.log(
-      `\n✅ PASS (${flavor} engine): both env-var names persisted to .env.`,
-    );
-    console.log(
-      "   → The long-running gateway will find DEEPSEEK_API_KEY on next startup.",
-    );
-    console.log(
-      "   → On the new engine, _host_derived_api_key() can resolve it.",
-    );
-  } else if (hasCustomPrefix && !hasHostDerived) {
-    console.log(
-      `\n❌ FAIL (${flavor} engine): only the custom-prefix form was persisted.`,
-    );
-    console.log(
-      "   → The new engine's host-derive resolver won't find a key for this provider.",
-    );
-    process.exitCode = 1;
-  } else {
-    console.log(
-      `\n❌ FAIL (${flavor} engine): missing one or both env-var names.`,
-    );
-    process.exitCode = 2;
-  }
-
-  // Phase E — teardown: restore original .env and config.yaml exactly
-  console.log("\n[E] Restoring original .env and removing test entry…");
-  fs.writeFileSync(envFile, envOriginal);
-  const cfgAfter = fs.readFileSync(cfgFile, "utf-8");
-  const cleanedCfg = cfgAfter.replace(
-    /\ncustom_providers:[\s\S]*?(?=\n[a-z_]+\s*:|$)/,
-    "",
-  );
-  fs.writeFileSync(cfgFile, cleanedCfg);
-  console.log("Cleanup done.");
-
-  await browser.close();
-})().catch((e) => {
-  console.error("ERROR:", e.message || e);
-  process.exit(3);
-});
+})();

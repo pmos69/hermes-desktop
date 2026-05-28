@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { hostDerivedEnvKeyForUrl } from "../src/main/host-derived-env";
+import {
+  hostDerivedEnvKeyForUrl,
+  shouldPruneOpenRouterApiKey,
+} from "../src/main/host-derived-env";
 
 /**
  * Dual-engine compat: the desktop writes a host-derived `<VENDOR>_API_KEY`
@@ -40,5 +43,11 @@ describe("hostDerivedEnvKeyForUrl", () => {
     expect(hostDerivedEnvKeyForUrl("https://API.DeepSeek.com/v1")).toBe(
       "DEEPSEEK_API_KEY",
     );
+  });
+
+  it("keeps OPENROUTER_API_KEY when OpenRouter is the host-derived provider", () => {
+    expect(shouldPruneOpenRouterApiKey("OPENROUTER_API_KEY")).toBe(false);
+    expect(shouldPruneOpenRouterApiKey("DEEPSEEK_API_KEY")).toBe(true);
+    expect(shouldPruneOpenRouterApiKey(null)).toBe(true);
   });
 });

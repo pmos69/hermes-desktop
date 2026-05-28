@@ -29,3 +29,9 @@ export function hostDerivedEnvKeyForUrl(baseUrl: string): string | null {
   }
   return null;
 }
+
+export function shouldPruneOpenRouterApiKey(
+  hostDerivedEnvKey: string | null,
+): boolean {
+  return hostDerivedEnvKey !== "OPENROUTER_API_KEY";
+}

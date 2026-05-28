@@ -28,7 +28,10 @@ import { pidIsAliveAs, stripAnsi } from "./utils";
 import { readModels } from "./models";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
-import { hostDerivedEnvKeyForUrl } from "./host-derived-env";
+import {
+  hostDerivedEnvKeyForUrl,
+  shouldPruneOpenRouterApiKey,
+} from "./host-derived-env";
 
 const LOCAL_API_URL = "http://127.0.0.1:8642";
 
@@ -875,7 +878,7 @@ function sendMessageViaCli(
       env[hostDerivedEnvKey] = resolvedKey;
     }
 
-    if (hostDerivedEnvKey !== "OPENROUTER_API_KEY") {
+    if (shouldPruneOpenRouterApiKey(hostDerivedEnvKey)) {
       delete env.OPENROUTER_API_KEY;
     }
     delete env.ANTHROPIC_TOKEN;
