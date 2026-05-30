@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "../../components/useI18n";
+import { CONFIG_HEALTH_UPDATED_EVENT } from "../../components/ConfigHealthBanner";
 import { CheckCircle, AlertTriangle, AlertCircle, RefreshCw } from "lucide-react";
 
 /**
@@ -36,6 +37,12 @@ interface ConfigHealthProps {
   profile?: string;
 }
 
+function publishConfigHealthReport(report: Report): void {
+  window.dispatchEvent(
+    new CustomEvent(CONFIG_HEALTH_UPDATED_EVENT, { detail: report }),
+  );
+}
+
 function SeverityIcon({
   severity,
 }: {
@@ -59,6 +66,7 @@ export function ConfigHealth({ profile }: ConfigHealthProps): React.JSX.Element 
     try {
       const r = (await window.hermesAPI.getConfigHealth(profile)) as Report;
       setReport(r);
+      publishConfigHealthReport(r);
     } catch {
       setReport(null);
     } finally {
@@ -75,6 +83,7 @@ export function ConfigHealth({ profile }: ConfigHealthProps): React.JSX.Element 
     try {
       const r = (await window.hermesAPI.rerunConfigHealth(profile)) as Report;
       setReport(r);
+      publishConfigHealthReport(r);
       setResults({});
     } finally {
       setLoading(false);
@@ -102,6 +111,7 @@ export function ConfigHealth({ profile }: ConfigHealthProps): React.JSX.Element 
           // Re-run so the issue disappears from the list when fixed
           const r = (await window.hermesAPI.rerunConfigHealth(profile)) as Report;
           setReport(r);
+          publishConfigHealthReport(r);
         }
       } finally {
         setFixingCode(null);

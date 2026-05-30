@@ -30,7 +30,9 @@ export default {
   removeAttachment: "Quitar adjunto",
   dropToAttach: "Suelta los archivos para adjuntarlos",
   attachUnsupported: "{{name}}: tipo de archivo no admitido",
-  attachImageTooLarge: "{{name}}: imagen demasiado grande (máx. 20 MB)",
+  attachImageTooLarge: "{{name}}: imagen demasiado grande (máx. 50 MB)",
+  attachImageUncompressible:
+    "{{name}}: no se pudo comprimir la imagen lo suficiente (GIF animado o formato no compatible). Prueba con una captura estática.",
   attachTextTooLarge: "{{name}}: archivo demasiado grande (máx. 256 KB)",
   attachTooMany: "Demasiados adjuntos (máx. 10 por mensaje)",
   attachReadFailed: "{{name}}: no se pudo leer",
@@ -76,5 +78,11 @@ export default {
     memory: "Mostrar la memoria del agente",
     persona: "Mostrar la personalidad actual",
     version: "Mostrar la versión de Hermes",
+  },
+  worktree: {
+    loading: "Cargando",
+    empty: "La carpeta está vacía",
+    emptyFolder: "Carpeta vacía",
+    errorLoading: "Error al cargar el contenido de la carpeta",
   },
 } as const;

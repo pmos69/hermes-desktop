@@ -13,4 +13,12 @@ export default {
   emptyHint: "Start chatting to create your first session",
   messages: "msg",
   messageSingular: "msg",
+  delete: "Delete conversation",
+  deleteConfirmTitle: "Delete conversation",
+  deleteConfirm:
+    "Delete this conversation? This cannot be undone — both the messages and the session record will be permanently removed.",
+  deleteClose: "Close delete confirmation",
+  deleteCancel: "Cancel",
+  deleteConfirmAction: "Delete",
+  deleteDeleting: "Deleting...",
 } as const;

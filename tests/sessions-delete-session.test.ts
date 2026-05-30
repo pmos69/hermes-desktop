@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdirSync, rmSync, existsSync } from "fs";
+import { mkdirSync, rmSync, existsSync, writeFileSync } from "fs";
+import { join } from "path";
 
 const { TEST_HOME, DB_PATH } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -335,6 +336,32 @@ describe("deleteSession", () => {
 
     const deletedMessages = getSessionMessages("session-to-delete");
     expect(deletedMessages).toHaveLength(0);
+  });
+
+  it("clears staged attachment files for the deleted session", () => {
+    const now = Math.floor(Date.now() / 1000);
+    seedDb([
+      {
+        id: "session-with-staged-files",
+        started_at: now,
+        message_count: 1,
+        messages: [{ role: "user", content: "see attached", timestamp: now }],
+      },
+    ]);
+    const stagingDir = join(
+      TEST_HOME,
+      "desktop-staging",
+      "session-with-staged-files",
+    );
+    mkdirSync(stagingDir, { recursive: true });
+    writeFileSync(join(stagingDir, "pasted.png"), "image bytes");
+
+    expect(existsSync(stagingDir)).toBe(true);
+
+    deleteSession("session-with-staged-files");
+
+    expect(existsSync(stagingDir)).toBe(false);
+    expect(getSessionMessages("session-with-staged-files")).toHaveLength(0);
   });
 
   it("does nothing when deleting a non-existent session", () => {

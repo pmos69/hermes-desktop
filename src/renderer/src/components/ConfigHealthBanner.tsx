@@ -20,11 +20,13 @@ interface ConfigHealthBannerProps {
 }
 
 interface Report {
+  profile?: string;
   issues: { severity: "error" | "warning" | "info" }[];
   summary: { errors: number; warnings: number; infos: number };
 }
 
 const DISMISS_STORAGE_KEY = "hermes-config-health-dismissed";
+export const CONFIG_HEALTH_UPDATED_EVENT = "hermes-config-health-updated";
 
 function readDismissedReportStamp(): number {
   try {
@@ -41,6 +43,15 @@ function rememberDismiss(ranAt: number): void {
   } catch {
     // localStorage can be unavailable in some sandboxed renderers
   }
+}
+
+function isReportForProfile(
+  report: (Report & { ranAt: number }) | null,
+  profile?: string,
+): boolean {
+  if (!report) return false;
+  const expected = profile || "default";
+  return !report.profile || report.profile === expected;
 }
 
 export function ConfigHealthBanner({
@@ -66,6 +77,23 @@ export function ConfigHealthBanner({
     })();
     return (): void => {
       cancelled = true;
+    };
+  }, [profile]);
+
+  useEffect(() => {
+    const onConfigHealthUpdated = (event: Event): void => {
+      const next = (event as CustomEvent<Report & { ranAt: number }>).detail;
+      if (isReportForProfile(next, profile)) {
+        setReport(next);
+      }
+    };
+
+    window.addEventListener(CONFIG_HEALTH_UPDATED_EVENT, onConfigHealthUpdated);
+    return (): void => {
+      window.removeEventListener(
+        CONFIG_HEALTH_UPDATED_EVENT,
+        onConfigHealthUpdated,
+      );
     };
   }, [profile]);
 
