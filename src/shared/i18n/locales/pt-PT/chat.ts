@@ -30,7 +30,9 @@ export default {
   removeAttachment: "Remover anexo",
   dropToAttach: "Largue ficheiros para anexar",
   attachUnsupported: "{{name}}: tipo de ficheiro não suportado",
-  attachImageTooLarge: "{{name}}: imagem demasiado grande (máx. 20 MB)",
+  attachImageTooLarge: "{{name}}: imagem demasiado grande (máx. 50 MB)",
+  attachImageUncompressible:
+    "{{name}}: não foi possível comprimir a imagem para caber (GIF animado ou formato não suportado). Tenta uma captura de ecrã estática.",
   attachTextTooLarge: "{{name}}: ficheiro demasiado grande (máx. 256 KB)",
   attachTooMany: "Demasiados anexos (máx. 10 por mensagem)",
   attachReadFailed: "{{name}}: não foi possível ler",
@@ -79,4 +81,10 @@ export default {
   },
   queued:
     "{{count}} mensagem(ns) em fila — serão enviadas quando o agente terminar",
+  worktree: {
+    loading: "A carregar",
+    empty: "A pasta está vazia",
+    emptyFolder: "Pasta vazia",
+    errorLoading: "Falha ao carregar conteúdo da pasta",
+  },
 } as const;

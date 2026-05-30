@@ -19,6 +19,7 @@ export function AttachmentChip({
   const { t } = useI18n();
   const [zoomed, setZoomed] = useState(false);
   const isImage = attachment.kind === "image";
+
   const showImageMenu = (event: React.MouseEvent): void => {
     if (!isImage || !attachment.dataUrl) return;
     event.preventDefault();
@@ -27,17 +28,27 @@ export function AttachmentChip({
       saveAs: t("chat.media.saveAs"),
     });
   };
+
   const previewImage = (): void => {
     if (!isImage || !attachment.dataUrl) return;
     onPreview?.(attachment);
     setZoomed(true);
   };
 
+  // When the renderer compressed the image down to fit the gateway's
+  // request-body cap (#405), surface the size delta in the tooltip so the
+  // user knows quality changed and isn't surprised by a "compressed"
+  // version appearing in the chat transcript.
+  const tooltip =
+    attachment.originalSize && attachment.originalSize > attachment.size
+      ? `${attachment.name} (${formatSize(attachment.originalSize)} → ${formatSize(attachment.size)}, compressed)`
+      : `${attachment.name} (${formatSize(attachment.size)})`;
+
   return (
     <>
       <div
         className={`attachment-chip attachment-chip-${attachment.kind}`}
-        title={`${attachment.name} (${formatSize(attachment.size)})`}
+        title={tooltip}
       >
         {isImage && attachment.dataUrl ? (
           <button

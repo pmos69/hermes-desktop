@@ -1,4 +1,4 @@
-import { act, render } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // useI18n needs an I18nProvider; the Sessions tab only uses `t` for labels,
@@ -19,15 +19,17 @@ const baseProps = {
   currentSessionId: null,
 };
 
-function installHermesAPI(): {
+function installHermesAPI(initialSessions: unknown[] = []): {
   listCachedSessions: ReturnType<typeof vi.fn>;
   syncSessionCache: ReturnType<typeof vi.fn>;
   searchSessions: ReturnType<typeof vi.fn>;
+  deleteSession: ReturnType<typeof vi.fn>;
 } {
   const api = {
-    listCachedSessions: vi.fn().mockResolvedValue([]),
-    syncSessionCache: vi.fn().mockResolvedValue([]),
+    listCachedSessions: vi.fn().mockResolvedValue(initialSessions),
+    syncSessionCache: vi.fn().mockResolvedValue(initialSessions),
     searchSessions: vi.fn().mockResolvedValue([]),
+    deleteSession: vi.fn().mockResolvedValue(undefined),
   };
   Object.defineProperty(window, "hermesAPI", {
     configurable: true,
@@ -102,5 +104,115 @@ describe("Sessions tab live refresh (#322)", () => {
       window.dispatchEvent(new Event("focus"));
     });
     expect(api.syncSessionCache.mock.calls.length).toBe(afterMount + 1);
+  });
+});
+
+describe("Sessions tab — delete affordance (#408)", () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("calls deleteSession when the trash button is clicked + confirmed", async () => {
+    const sessions = [
+      {
+        id: "sess-abc-123",
+        title: "First chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "api_server",
+        messageCount: 3,
+        model: "gpt-4",
+      },
+    ];
+    const api = installHermesAPI(sessions);
+
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    const deleteBtn = screen.getByRole("button", {
+      name: "sessions.delete",
+    });
+    await act(async () => {
+      fireEvent.click(deleteBtn);
+    });
+
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "sessions.deleteConfirm",
+    );
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "sessions.deleteConfirmAction",
+        }),
+      );
+    });
+
+    expect(api.deleteSession).toHaveBeenCalledWith("sess-abc-123");
+  });
+
+  it("does NOT call deleteSession when the confirm is cancelled", async () => {
+    const sessions = [
+      {
+        id: "sess-abc-123",
+        title: "First chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "api_server",
+        messageCount: 3,
+        model: "gpt-4",
+      },
+    ];
+    const api = installHermesAPI(sessions);
+
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+
+    const deleteBtn = screen.getByRole("button", {
+      name: "sessions.delete",
+    });
+    await act(async () => {
+      fireEvent.click(deleteBtn);
+    });
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "sessions.deleteCancel" }),
+      );
+    });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(api.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it("stops click propagation so the card's resume handler doesn't fire", async () => {
+    // Regression: the trash button is nested inside a clickable card.
+    // Clicking trash must NOT also resume the session (would open the chat
+    // the user is trying to delete).
+    const sessions = [
+      {
+        id: "sess-abc-123",
+        title: "First chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "api_server",
+        messageCount: 3,
+        model: "gpt-4",
+      },
+    ];
+    installHermesAPI(sessions);
+    const onResume = vi.fn();
+
+    render(
+      <Sessions {...baseProps} onResumeSession={onResume} visible={true} />,
+    );
+    await act(async () => {});
+
+    const deleteBtn = screen.getByRole("button", {
+      name: "sessions.delete",
+    });
+    await act(async () => {
+      fireEvent.click(deleteBtn);
+    });
+
+    expect(onResume).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });

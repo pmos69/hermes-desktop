@@ -1,6 +1,13 @@
 import { ChildProcess, spawn } from "child_process";
 import { randomUUID } from "crypto";
-import { existsSync, readFileSync, appendFileSync, unlinkSync } from "fs";
+import {
+  existsSync,
+  readFileSync,
+  appendFileSync,
+  unlinkSync,
+  mkdirSync,
+  createWriteStream,
+} from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import http from "http";
@@ -24,7 +31,12 @@ import {
   isSshTunnelHealthy,
   startSshTunnel,
 } from "./ssh-tunnel";
-import { pidIsAliveAs, stripAnsi } from "./utils";
+import {
+  pidIsAliveAs,
+  stripAnsi,
+  profileHome,
+  getActiveProfileNameSync,
+} from "./utils";
 import { readModels } from "./models";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
@@ -414,8 +426,22 @@ function sendMessageViaApi(
     ...(_resumeSessionId ? { session_id: _resumeSessionId } : {}),
   });
 
+  // Encode the body up-front into a Buffer so we can:
+  //  1. Set `Content-Length` accurately based on byte length (NOT char
+  //     count — JSON.stringify of an image data URL is ASCII so they
+  //     match, but multi-byte chars in user text would diverge).
+  //  2. Disable Node's default `Transfer-Encoding: chunked` framing for
+  //     bodies written via `req.write(body); req.end();`. Chunked
+  //     framing skips the gateway's `body_limit_middleware` (which
+  //     inspects Content-Length only), so an oversized payload that
+  //     should produce a clean 413 "body_too_large" gets the
+  //     misleading 400 "Invalid JSON in request body" via aiohttp's
+  //     client_max_size overflow path. See #405.
+  const bodyBuf = Buffer.from(body, "utf-8");
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "Content-Length": String(bodyBuf.length),
     ...getRemoteAuthHeader(),
   };
   // Local API server key (API_SERVER_KEY in the profile's .env /
@@ -492,11 +518,20 @@ function sendMessageViaApi(
       messages: [{ role: "user", content: userContent }],
       stream: false,
     });
+    const probeBodyBuf = Buffer.from(probeBody, "utf-8");
+    // Per-request Content-Length (the outer `headers` object's value
+    // belongs to the streaming request — reusing it here would lie about
+    // this body's size and break the framing the same way the missing
+    // Content-Length did before #405). Spread + override.
+    const probeHeaders = {
+      ...headers,
+      "Content-Length": String(probeBodyBuf.length),
+    };
     const probeUrl = `${getApiUrl()}/v1/chat/completions`;
     const probeMod = probeUrl.startsWith("https") ? https : http;
     const probeReq = probeMod.request(
       probeUrl,
-      { method: "POST", headers },
+      { method: "POST", headers: probeHeaders },
       (res) => {
         let raw = "";
         res.on("data", (d) => {
@@ -525,7 +560,7 @@ function sendMessageViaApi(
         "No response received from the model. Check your model configuration and API key.",
       );
     });
-    probeReq.write(probeBody);
+    probeReq.write(probeBodyBuf);
     probeReq.end();
   }
 
@@ -702,7 +737,7 @@ function sendMessageViaApi(
     );
   });
 
-  req.write(body);
+  req.write(bodyBuf);
   req.end();
 
   return {
@@ -1084,6 +1119,24 @@ export function startGateway(profile?: string): boolean {
   ensureInitialized();
   if (isGatewayRunning()) return false;
 
+  // Pre-flight: verify the Python interpreter exists before attempting to
+  // spawn. Without this check, spawn() fails with ENOENT and the error is
+  // completely silent (stdio:"ignore", no error handler).
+  if (!existsSync(HERMES_PYTHON)) {
+    console.error(
+      `[gateway] Cannot start: Python interpreter not found at ${HERMES_PYTHON}. ` +
+        "Is hermes-agent installed?",
+    );
+    return false;
+  }
+  if (!existsSync(HERMES_REPO)) {
+    console.error(
+      `[gateway] Cannot start: hermes-agent repo not found at ${HERMES_REPO}. ` +
+        "Is hermes-agent installed?",
+    );
+    return false;
+  }
+
   // Build gateway env with profile API keys
   const gatewayEnv: Record<string, string> = {
     ...(process.env as Record<string, string>),
@@ -1101,17 +1154,39 @@ export function startGateway(profile?: string): boolean {
     }
   }
 
+  // Route stderr to a log file so startup errors are visible for debugging.
+  // stdout is still ignored (the gateway daemonizes and writes its own logs).
+  const logDir = HERMES_HOME;
+  try {
+    mkdirSync(logDir, { recursive: true });
+  } catch {
+    // ignore
+  }
+  const logPath = join(logDir, "gateway-stderr.log");
+  const stderrStream = createWriteStream(logPath, { flags: "a" });
+
   gatewayProcess = spawn(HERMES_PYTHON, hermesCliArgs(["gateway"]), {
     cwd: HERMES_REPO,
     env: gatewayEnv,
-    stdio: "ignore",
+    stdio: ["ignore", "ignore", stderrStream],
     detached: true,
     ...HIDDEN_SUBPROCESS_OPTIONS,
   });
 
-  gatewayProcess.unref();
+  gatewayProcess.on("error", (err) => {
+    console.error("[gateway] Failed to spawn gateway process:", err.message);
+    gatewayProcess = null;
+    gatewayStartedByApp = false;
+    apiServerAvailable = false;
+  });
 
-  gatewayProcess.on("close", () => {
+  gatewayProcess.on("close", (code, signal) => {
+    if (code !== null && code !== 0) {
+      console.error(
+        `[gateway] Process exited with code ${code}${signal ? ` (signal: ${signal})` : ""}. ` +
+          `Check ${logPath} for details.`,
+      );
+    }
     gatewayProcess = null;
     gatewayStartedByApp = false;
     apiServerAvailable = false;
@@ -1119,6 +1194,7 @@ export function startGateway(profile?: string): boolean {
     startHealthPolling();
   });
 
+  gatewayProcess.unref();
   gatewayStartedByApp = true;
 
   // Wait a bit then check if API server came up
@@ -1129,8 +1205,7 @@ export function startGateway(profile?: string): boolean {
   return true;
 }
 
-function readPidFile(): number | null {
-  const pidFile = join(HERMES_HOME, "gateway.pid");
+function parsePidFromFile(pidFile: string): number | null {
   if (!existsSync(pidFile)) return null;
   try {
     const raw = readFileSync(pidFile, "utf-8").trim();
@@ -1142,6 +1217,30 @@ function readPidFile(): number | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Returns candidate gateway.pid paths to check. The hermes CLI writes the
+ * PID file into the active profile's home directory when a named profile is
+ * in use (e.g. ~/.hermes/profiles/fatha/gateway.pid), falling back to
+ * ~/.hermes/gateway.pid for the default profile. We check both so that
+ * isGatewayRunning() works regardless of which profile is active.
+ */
+function gatewayPidPaths(): string[] {
+  const paths: string[] = [join(HERMES_HOME, "gateway.pid")];
+  const activeProfile = getActiveProfileNameSync();
+  if (activeProfile && activeProfile !== "default") {
+    paths.push(join(profileHome(activeProfile), "gateway.pid"));
+  }
+  return paths;
+}
+
+function readPidFile(): number | null {
+  for (const pidFile of gatewayPidPaths()) {
+    const pid = parsePidFromFile(pidFile);
+    if (pid !== null) return pid;
+  }
+  return null;
 }
 
 export function stopGateway(force = false): void {
@@ -1162,12 +1261,13 @@ export function stopGateway(force = false): void {
   // Always clear the PID file once we've signalled it. Leaving a stale PID
   // around means the next isGatewayRunning() / stopGateway() call can hit
   // an unrelated process that the OS has since assigned the same PID.
-  const pidFile = join(HERMES_HOME, "gateway.pid");
-  if (existsSync(pidFile)) {
-    try {
-      unlinkSync(pidFile);
-    } catch {
-      // best-effort; will be overwritten on next gateway start
+  for (const pidFile of gatewayPidPaths()) {
+    if (existsSync(pidFile)) {
+      try {
+        unlinkSync(pidFile);
+      } catch {
+        // best-effort; will be overwritten on next gateway start
+      }
     }
   }
   gatewayStartedByApp = false;

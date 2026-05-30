@@ -33,7 +33,9 @@ export default {
   removeAttachment: "Remove attachment",
   dropToAttach: "Drop files to attach",
   attachUnsupported: "{{name}}: file type not supported",
-  attachImageTooLarge: "{{name}}: image too large (max 20 MB)",
+  attachImageTooLarge: "{{name}}: image too large (max 50 MB)",
+  attachImageUncompressible:
+    "{{name}}: couldn't compress image to fit (animated GIFs or unsupported format). Try a static screenshot.",
   attachTextTooLarge: "{{name}}: file too large (max 256 KB)",
   attachTooMany: "Too many attachments (max 10 per message)",
   attachReadFailed: "{{name}}: could not be read",
@@ -81,4 +83,17 @@ export default {
     version: "Show Hermes version",
   },
   queued: "{{count}} message(s) queued — will send when the agent finishes",
+  worktree: {
+    loading: "Loading",
+    empty: "Folder is empty",
+    emptyFolder: "Empty folder",
+    errorLoading: "Failed to load folder contents",
+    closeFile: "Close",
+    open: "Open",
+    openInEditor: "Open in default editor",
+    fileTruncated: "truncated",
+    fileTruncatedWarning: "File is too large — showing first 100KB only",
+  },
+  showWorktree: "Show file explorer",
+  hideWorktree: "Hide file explorer",
 } as const;
