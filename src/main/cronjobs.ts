@@ -201,14 +201,10 @@ export async function createCronJob(
     }
   }
 
-  // Use -- to prevent prompt from being parsed as a flag
   const args = ["create", schedule];
+  if (prompt) args.push(prompt);
   if (name) args.push("--name", name);
   if (deliver) args.push("--deliver", deliver);
-  if (prompt) {
-    args.push("--");
-    args.push(prompt);
-  }
 
   const result = await runCronCommand(args, profile);
   return { success: result.success, error: result.error };

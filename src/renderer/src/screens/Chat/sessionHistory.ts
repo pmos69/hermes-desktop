@@ -129,6 +129,13 @@ function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+function normalizeBubbleContentForMatch(s: string): string {
+  return normalizeWhitespace(s).replace(
+    /(?:\s+\[(?:screenshot|image)\])+$/i,
+    "",
+  );
+}
+
 function reconciliationKey(m: ChatMessage): string | null {
   if ("kind" in m) {
     switch (m.kind) {
@@ -143,7 +150,7 @@ function reconciliationKey(m: ChatMessage): string | null {
     }
   }
   const bubble = m as ChatBubbleMessage;
-  return `${bubble.role}:${normalizeWhitespace(bubble.content || "").slice(0, 200)}`;
+  return `${bubble.role}:${normalizeBubbleContentForMatch(bubble.content || "").slice(0, 200)}`;
 }
 
 /**
@@ -161,7 +168,11 @@ function mergeDbMetadataIntoStreamed(
   const s = streamed as ChatBubbleMessage;
   const d = db as ChatBubbleMessage;
   // Attachments from the DB that the stream didn't deliver.
-  if (d.attachments && d.attachments.length > 0 && (!s.attachments || s.attachments.length === 0)) {
+  if (
+    d.attachments &&
+    d.attachments.length > 0 &&
+    (!s.attachments || s.attachments.length === 0)
+  ) {
     return { ...s, attachments: d.attachments };
   }
   return s;
@@ -233,31 +244,66 @@ export function reconcileStreamedWithDb(
   // result, skip it — it's a near-duplicate that slipped past the
   // key-based match (e.g. trailing-whitespace drift, one-frame delta
   // that didn't round-trip through the DB identically).
-  const seenBubbleKeys = new Set<string>();
-  for (const m of result) {
-    if (!("kind" in m)) {
-      const bubble = m as ChatBubbleMessage;
-      seenBubbleKeys.add(
-        `${bubble.role}:${normalizeWhitespace(bubble.content || "")}`,
-      );
-    }
-  }
-
   const consumedIds = new Set(result.map((m) => m.id));
-  for (const m of streamed) {
-    if (consumedIds.has(m.id)) continue;
+  const consumedStreamIndexes: number[] = [];
+  for (let i = 0; i < streamed.length; i++) {
+    if (consumedIds.has(streamed[i].id)) consumedStreamIndexes.push(i);
+  }
+  const firstConsumedIndex =
+    consumedStreamIndexes.length > 0 ? Math.min(...consumedStreamIndexes) : -1;
+
+  const seedSeenBubbleKeys = (
+    seen: Set<string>,
+    items: ReadonlyArray<ChatMessage>,
+  ): void => {
+    for (const m of items) {
+      if (!("kind" in m)) {
+        const bubble = m as ChatBubbleMessage;
+        seen.add(
+          `${bubble.role}:${normalizeBubbleContentForMatch(bubble.content || "")}`,
+        );
+      }
+    }
+  };
+
+  const appendIfUnique = (
+    target: ChatMessage[],
+    m: ChatMessage,
+    seen: Set<string>,
+  ): boolean => {
+    if (consumedIds.has(m.id)) return false;
     // For bubble messages, check if an equivalent already exists in the
     // result set.  Non-bubble messages (tool_call, tool_result, reasoning)
     // always pass through — they're either matched by callId above or are
     // genuinely new.
     if (!("kind" in m)) {
       const bubble = m as ChatBubbleMessage;
-      const contentKey = `${bubble.role}:${normalizeWhitespace(bubble.content || "")}`;
-      if (seenBubbleKeys.has(contentKey)) continue;
-      seenBubbleKeys.add(contentKey);
+      const contentKey = `${bubble.role}:${normalizeBubbleContentForMatch(bubble.content || "")}`;
+      if (seen.has(contentKey)) return false;
+      seen.add(contentKey);
     }
-    result.push(m);
+    target.push(m);
+    return true;
+  };
+
+  const prefix: ChatMessage[] = [];
+  const seenPrefixBubbleKeys = new Set<string>();
+  for (let i = 0; i < streamed.length; i++) {
+    const m = streamed[i];
+    if (firstConsumedIndex >= 0 && i < firstConsumedIndex) {
+      appendIfUnique(prefix, m, seenPrefixBubbleKeys);
+    }
   }
 
-  return result;
+  const suffix: ChatMessage[] = [];
+  const seenSuffixBubbleKeys = new Set<string>();
+  seedSeenBubbleKeys(seenSuffixBubbleKeys, prefix);
+  seedSeenBubbleKeys(seenSuffixBubbleKeys, result);
+  for (let i = 0; i < streamed.length; i++) {
+    const m = streamed[i];
+    if (firstConsumedIndex >= 0 && i < firstConsumedIndex) continue;
+    appendIfUnique(suffix, m, seenSuffixBubbleKeys);
+  }
+
+  return [...prefix, ...result, ...suffix];
 }
