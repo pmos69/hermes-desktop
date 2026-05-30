@@ -685,6 +685,15 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<{ success: boolean; data?: { id: string }; error?: string }>;
   selectFolder: () => Promise<string | null>;
+  readDirectory: (
+    dirPath: string,
+  ) => Promise<{ name: string; isDirectory: boolean }[] | null>;
+  readFile: (
+    filePath: string,
+    maxBytes?: number,
+  ) => Promise<{ content: string; truncated: boolean } | null>;
+  openFileInEditor: (filePath: string) => Promise<boolean>;
+  readImageFile: (filePath: string) => Promise<string | null>;
   kanbanAssignTask: (
     taskId: string,
     assignee: string | null,

@@ -58,6 +58,10 @@ describe("detectProviderFromUrl", () => {
     expect(
       detectProviderFromUrl("http://my-workstation.example.com:1234/v1"),
     ).toBe("lmstudio");
+    // Atomic Chat
+    expect(
+      detectProviderFromUrl("http://atomic-box.example.com:1337/v1"),
+    ).toBe("custom");
     // vLLM
     expect(detectProviderFromUrl("http://gpu-rig.example.com:8000")).toBe(
       "vllm",

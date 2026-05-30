@@ -92,6 +92,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             return t("chat.attachTooMany");
           case "image-too-large":
             return t("chat.attachImageTooLarge", { name: err.filename });
+          case "image-uncompressible":
+            return t("chat.attachImageUncompressible", { name: err.filename });
           case "text-too-large":
             return t("chat.attachTextTooLarge", { name: err.filename });
           case "unsupported-type":

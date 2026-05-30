@@ -22,10 +22,11 @@ export function detectProviderFromUrl(rawUrl: string): string | null {
   if (/api\.minimax(i)?\.(chat|com)/.test(url)) return "minimax";
 
   // Well-known local-LLM ports on any host — Ollama 11434, LM Studio 1234,
-  // vLLM 8000, llama.cpp 8080. These run on LAN VMs too, so we don't
+  // Atomic Chat 1337, vLLM 8000, llama.cpp 8080. These run on LAN VMs too, so we don't
   // require a private-IP match for the port-only heuristic.
   if (/:11434(\/|$)/.test(url)) return "ollama";
   if (/:1234(\/|$)/.test(url)) return "lmstudio";
+  if (/:1337(\/|$)/.test(url)) return "custom";
   if (/:8000(\/|$)/.test(url)) return "vllm";
   if (/:8080(\/|$)/.test(url)) return "llamacpp";
 
