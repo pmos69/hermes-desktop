@@ -3,6 +3,7 @@ import { existsSync } from "fs";
 import { activeStateDbPath } from "./utils";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime } from "../shared/attachments";
+import { clearStagedAttachments } from "./attachment-staging";
 import { removeSessionFromCache } from "./session-cache";
 
 // Sentinel prefix used by hermes-agent's hermes_state.py to mark
@@ -495,17 +496,19 @@ export function getSessionMessages(sessionId: string): HistoryItem[] {
 
 export function deleteSession(sessionId: string): void {
   const db = getDb(false);
-  if (!db) return;
 
-  try {
-    const tx = db.transaction((id: string) => {
-      db.prepare("DELETE FROM messages WHERE session_id = ?").run(id);
-      db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
-    });
-    tx(sessionId);
-  } finally {
-    db.close();
+  if (db) {
+    try {
+      const tx = db.transaction((id: string) => {
+        db.prepare("DELETE FROM messages WHERE session_id = ?").run(id);
+        db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+      });
+      tx(sessionId);
+    } finally {
+      db.close();
+    }
   }
 
+  clearStagedAttachments(sessionId);
   removeSessionFromCache(sessionId);
 }

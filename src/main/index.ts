@@ -8,7 +8,8 @@ import {
   dialog,
   clipboard,
 } from "electron";
-import { join } from "path";
+import { join, extname } from "path";
+import { readdir, readFile } from "fs/promises";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
@@ -1452,6 +1453,88 @@ function setupIPC(): void {
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
   });
+
+  // Read directory contents for worktree panel
+  ipcMain.handle(
+    "read-directory",
+    async (
+      _event,
+      dirPath: string,
+    ): Promise<{ name: string; isDirectory: boolean }[] | null> => {
+      try {
+        const entries = await readdir(dirPath, { withFileTypes: true });
+        return entries.map((entry) => ({
+          name: entry.name,
+          isDirectory: entry.isDirectory(),
+        }));
+      } catch {
+        return null;
+      }
+    },
+  );
+
+  // Read file contents for file viewer
+  ipcMain.handle(
+    "read-file",
+    async (
+      _event,
+      filePath: string,
+      maxBytes?: number,
+    ): Promise<{ content: string; truncated: boolean } | null> => {
+      try {
+        const limit = maxBytes ?? 102400; // Default 100KB
+        const buffer = await readFile(filePath);
+        const truncated = buffer.byteLength > limit;
+        const content = truncated
+          ? buffer.subarray(0, limit).toString("utf-8")
+          : buffer.toString("utf-8");
+        return { content, truncated };
+      } catch {
+        return null;
+      }
+    },
+  );
+
+  // Open file in default application
+  ipcMain.handle("open-file-in-editor", async (_event, filePath: string) => {
+    try {
+      await shell.openPath(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  // Read image file as data URL for preview
+  ipcMain.handle(
+    "read-image-file",
+    async (_event, filePath: string): Promise<string | null> => {
+      try {
+        const buffer = await readFile(filePath);
+        const ext = extname(filePath).toLowerCase().slice(1);
+        const mimeType =
+          ext === "png"
+            ? "image/png"
+            : ext === "jpg" || ext === "jpeg"
+              ? "image/jpeg"
+              : ext === "gif"
+                ? "image/gif"
+                : ext === "webp"
+                  ? "image/webp"
+                  : ext === "svg"
+                    ? "image/svg+xml"
+                    : ext === "bmp"
+                      ? "image/bmp"
+                      : ext === "ico"
+                        ? "image/x-icon"
+                        : "application/octet-stream";
+        const base64 = buffer.toString("base64");
+        return `data:${mimeType};base64,${base64}`;
+      } catch {
+        return null;
+      }
+    },
+  );
   ipcMain.handle(
     "kanban-assign-task",
     (_event, taskId: string, assignee: string | null, profile?: string) =>
@@ -1736,9 +1819,11 @@ function setupUpdater(): void {
 }
 
 // Opt-in Chrome DevTools Protocol port for E2E testing. Set
-// ENABLE_CDP=1 (with optional CDP_PORT, default 9222) before
-// launching `npm run dev` to expose the renderer for Playwright
-// attach. Off by default — no effect on normal dev or prod builds.
+// ENABLE_CDP=1 (with optional CDP_PORT, default 9222) before launching
+// `npm run dev` to expose the renderer for Playwright (or any CDP
+// client) to attach and drive the UI without going through
+// screenshots / OCR. Off by default — no effect on normal dev or
+// production builds. See `scripts/README.md` for the harness workflow.
 if (process.env.ENABLE_CDP === "1") {
   app.commandLine.appendSwitch(
     "remote-debugging-port",

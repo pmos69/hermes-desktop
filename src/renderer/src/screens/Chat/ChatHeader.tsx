@@ -1,5 +1,12 @@
 import { memo } from "react";
-import { Trash2 as Trash, Plus, Zap, FolderOpen, X } from "lucide-react";
+import {
+  Trash2 as Trash,
+  Plus,
+  Zap,
+  FolderOpen,
+  X,
+  FolderTree,
+} from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import type { UsageState } from "./types";
 
@@ -13,9 +20,12 @@ interface ChatHeaderProps {
   /** Whether to show the context-folder control (hidden in remote/SSH mode,
    *  where the picker would browse the wrong machine's filesystem). */
   showContextFolder: boolean;
+  /** Whether the worktree panel is visible (when contextFolder is set). */
+  worktreeVisible: boolean;
   onPickFolder: () => void;
   onClearFolder: () => void;
   onToggleFast: () => void;
+  onToggleWorktree: () => void;
   onNewChat?: () => void;
   onClear: () => void;
 }
@@ -49,9 +59,11 @@ export const ChatHeader = memo(function ChatHeader({
   hasMessages,
   contextFolder,
   showContextFolder,
+  worktreeVisible,
   onPickFolder,
   onClearFolder,
   onToggleFast,
+  onToggleWorktree,
   onNewChat,
   onClear,
 }: ChatHeaderProps): React.JSX.Element {
@@ -87,6 +99,17 @@ export const ChatHeader = memo(function ChatHeader({
                 title={t("chat.removeContextFolder")}
               >
                 <X size={12} />
+              </button>
+              <button
+                className={`btn-ghost chat-worktree-toggle ${worktreeVisible ? "chat-worktree-active" : ""}`}
+                onClick={onToggleWorktree}
+                title={
+                  worktreeVisible
+                    ? t("chat.hideWorktree")
+                    : t("chat.showWorktree")
+                }
+              >
+                <FolderTree size={14} />
               </button>
             </div>
           ) : (

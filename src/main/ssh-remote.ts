@@ -1918,7 +1918,8 @@ export function buildRemoteHermesCmd(args: string[], extraShell = ""): string {
   const probe = candidates
     .map((p) => `[ -x ${p} ] && exec ${p} ${quotedArgs}${extraShell}`)
     .join("; ");
-  return `bash -c '${probe}; command -v hermes >/dev/null && exec hermes ${quotedArgs}${extraShell}; echo "ERR: hermes CLI not found on remote PATH or in any known venv location" >&2; exit 1'`;
+  const script = `${probe}; command -v hermes >/dev/null && exec hermes ${quotedArgs}${extraShell}; echo "ERR: hermes CLI not found on remote PATH or in any known venv location" >&2; exit 1`;
+  return `bash -c ${shellQuote(script)}`;
 }
 
 export async function sshRunDoctor(config: SshConfig): Promise<string> {

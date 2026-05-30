@@ -1091,6 +1091,498 @@ body {
   position: relative;
 }
 
+/* Chat body: holds messages and worktree panel side by side */
+.chat-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Worktree panel - file explorer on the right */
+.worktree-panel {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.worktree-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+.worktree-header-icon {
+  color: var(--accent-text);
+  flex-shrink: 0;
+}
+
+.worktree-header-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worktree-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.worktree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background-color var(--transition);
+  user-select: none;
+}
+
+.worktree-row:hover {
+  background: var(--bg-hover);
+}
+
+.worktree-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.worktree-chevron-placeholder {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.worktree-icon {
+  flex-shrink: 0;
+}
+
+.worktree-folder-icon {
+  color: var(--accent-text);
+}
+
+.worktree-file-icon {
+  color: var(--text-muted);
+}
+
+.worktree-name {
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worktree-loading,
+.worktree-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 14px;
+}
+
+.worktree-error {
+  font-size: 12px;
+  color: var(--error);
+  padding: 8px 14px;
+}
+
+/* File viewer modal */
+.file-viewer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 40px;
+}
+
+.file-viewer-modal {
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 900px;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.file-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #333;
+  background: #252526;
+  flex-shrink: 0;
+}
+
+.file-viewer-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.file-viewer-icon {
+  color: #858585;
+  flex-shrink: 0;
+}
+
+.file-viewer-filename {
+  font-size: 13px;
+  font-weight: 500;
+  color: #cccccc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.file-viewer-size {
+  font-size: 11px;
+  color: #858585;
+  margin-left: 8px;
+  font-family: var(--font-mono);
+}
+
+.file-viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.file-viewer-open {
+  opacity: 0.8;
+  padding: 6px 10px;
+  color: #cccccc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.file-viewer-open:hover {
+  opacity: 1;
+  background: #3c3c3c;
+  border-radius: 4px;
+}
+
+.file-viewer-open-text {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.file-viewer-close {
+  opacity: 0.7;
+  padding: 6px;
+  color: #cccccc;
+}
+
+.file-viewer-close:hover {
+  opacity: 1;
+  background: #3c3c3c;
+  border-radius: 4px;
+}
+
+/* Binary file placeholder */
+.file-viewer-binary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  color: #858585;
+}
+
+.file-viewer-binary-icon {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.file-viewer-binary-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #cccccc;
+}
+
+.file-viewer-binary-hint {
+  font-size: 12px;
+  color: #858585;
+}
+
+/* Image viewer styles */
+.file-viewer-image-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 20px;
+  background: #1e1e1e;
+  overflow: auto;
+}
+
+.file-viewer-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.file-viewer-content {
+  flex: 1;
+  overflow: auto;
+  background: #1e1e1e;
+}
+
+.file-viewer-loading,
+.file-viewer-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 14px;
+  color: #858585;
+}
+
+.file-viewer-error {
+  color: #f48771;
+}
+
+.file-viewer-truncated {
+  padding: 10px 16px;
+  background: rgba(255, 204, 0, 0.1);
+  border-bottom: 1px solid #333;
+  font-size: 12px;
+  color: #cccccc;
+  font-family: var(--font-mono);
+}
+
+/* VS Code-like code viewer with line numbers */
+.file-viewer-code {
+  margin: 0;
+  padding: 0;
+  background: #1e1e1e;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  display: flex;
+}
+
+.file-viewer-code code {
+  display: block;
+  padding: 16px;
+  padding-left: 16px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  white-space: pre;
+  overflow-x: auto;
+  tab-size: 2;
+}
+
+/* Custom scrollbar for file viewer */
+.file-viewer-content::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.file-viewer-content::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.file-viewer-content::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 5px;
+}
+
+.file-viewer-content::-webkit-scrollbar-thumb:hover {
+  background: #4f4f4f;
+}
+
+/* Override highlight.js styles for VS Code dark theme look */
+.file-viewer-modal .hljs {
+  background: #1e1e1e;
+  color: #d4d4d4;
+}
+
+/* Keyword - blue */
+.file-viewer-modal .hljs-keyword,
+.file-viewer-modal .hljs-selector-tag,
+.file-viewer-modal .hljs-subst {
+  color: #569cd6;
+  font-weight: normal;
+}
+
+/* String - orange/red */
+.file-viewer-modal .hljs-string,
+.file-viewer-modal .hljs-regexp,
+.file-viewer-modal .hljs-addition,
+.file-viewer-modal .hljs-attribute {
+  color: #ce9178;
+}
+
+/* Number - light green */
+.file-viewer-modal .hljs-number,
+.file-viewer-modal .hljs-literal {
+  color: #b5cea8;
+}
+
+/* Function/method - yellow */
+.file-viewer-modal .hljs-title,
+.file-viewer-modal .hljs-title.class_,
+.file-viewer-modal .hljs-title.function_,
+.file-viewer-modal .hljs-built_in {
+  color: #dcdcaa;
+}
+
+/* Variable - light blue */
+.file-viewer-modal .hljs-variable,
+.file-viewer-modal .hljs-template-variable,
+.file-viewer-modal .hljs-params {
+  color: #9cdcfe;
+}
+
+/* Property - light blue */
+.file-viewer-modal .hljs-property,
+.file-viewer-modal .hljs-attr {
+  color: #9cdcfe;
+}
+
+/* Comment - green */
+.file-viewer-modal .hljs-comment,
+.file-viewer-modal .hljs-quote {
+  color: #6a9955;
+  font-style: italic;
+}
+
+/* Operator - light */
+.file-viewer-modal .hljs-operator,
+.file-viewer-modal .hljs-punctuation {
+  color: #d4d4d4;
+}
+
+/* Tag (HTML/XML) - blue */
+.file-viewer-modal .hljs-tag {
+  color: #569cd6;
+}
+
+/* Tag name - red */
+.file-viewer-modal .hljs-name {
+  color: #569cd6;
+}
+
+/* Tag attribute - light blue */
+.file-viewer-modal .hljs-attr {
+  color: #9cdcfe;
+}
+
+/* CSS property - light blue */
+.file-viewer-modal .hljs-selector-id,
+.file-viewer-modal .hljs-selector-class,
+.file-viewer-modal .hljs-selector-attr,
+.file-viewer-modal .hljs-selector-pseudo {
+  color: #d7ba7d;
+}
+
+/* Type/Class - greenish */
+.file-viewer-modal .hljs-type,
+.file-viewer-modal .hljs-class_ {
+  color: #4ec9b0;
+}
+
+/* Meta - gray */
+.file-viewer-modal .hljs-meta {
+  color: #808080;
+}
+
+/* Emphasis - bold */
+.file-viewer-modal .hljs-emphasis {
+  font-style: italic;
+}
+
+/* Strong - bold */
+.file-viewer-modal .hljs-strong {
+  font-weight: bold;
+}
+
+/* Built-in constant */
+.file-viewer-modal .hljs-built_in,
+.file-viewer-modal .hljs-builtin-name {
+  color: #dcdcaa;
+}
+
+/* Clickable file rows in worktree */
+.worktree-row-file {
+  cursor: pointer;
+}
+
+.worktree-row-file:hover .worktree-name {
+  color: var(--accent-text);
+}
+
+/* File icon wrapper for react-file-icon */
+.worktree-file-icon-wrapper {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.worktree-file-icon-wrapper svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Worktree toggle button in header */
+.chat-worktree-toggle {
+  opacity: 0.5;
+  margin-left: 2px;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
+}
+
+.chat-worktree-toggle:hover {
+  opacity: 0.8;
+}
+
+.chat-worktree-active {
+  opacity: 1;
+  color: var(--accent-text);
+}
+
+.chat-worktree-active:hover {
+  opacity: 1;
+}
+
 .chat-header {
   padding: 14px 24px;
   border-bottom: 1px solid var(--border);
@@ -3460,6 +3952,97 @@ body {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+/* Delete (trash) button on each session card — #408.
+ * Slides into the right side of the tags row so it doesn't fight the
+ * card's main click target. Stays subtle until hover so the row doesn't
+ * look cluttered when the user is just browsing. */
+.sessions-card-delete {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0.45;
+  transition:
+    opacity var(--transition),
+    background var(--transition),
+    color var(--transition);
+}
+
+.sessions-card:hover .sessions-card-delete {
+  opacity: 1;
+}
+
+.sessions-card-delete:hover,
+.sessions-card-delete:focus-visible {
+  background: var(--bg-tertiary);
+  color: var(--danger, #e06c75);
+  opacity: 1;
+}
+
+.sessions-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.58);
+  animation: fadeIn 0.15s ease;
+}
+
+.sessions-confirm-modal {
+  width: min(440px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-lg);
+  animation: slideUp 0.2s ease;
+}
+
+.sessions-confirm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sessions-confirm-header h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.sessions-confirm-close {
+  padding: 6px;
+}
+
+.sessions-confirm-body {
+  padding: 18px;
+}
+
+.sessions-confirm-body p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.sessions-confirm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--border);
 }
 
 .sessions-tag {
