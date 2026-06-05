@@ -1655,6 +1655,7 @@ function sendMessageViaRuns(
 
   return {
     abort: () => {
+      if (finished && !fallbackStarted) return;
       controller.abort();
       startReq?.destroy();
       eventsReq?.destroy();

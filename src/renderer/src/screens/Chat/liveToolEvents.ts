@@ -206,9 +206,11 @@ function findActiveTurnToolIndex(
   if (event.hasStableCallId !== false) {
     const stableIndex = findStableToolIndex(messages, event);
     if (stableIndex >= 0) return stableIndex;
-    if (event.status === "running") {
-      return findLatestRunningSyntheticToolByNameIndex(messages, event);
-    }
+    const syntheticIndex = findLatestRunningSyntheticToolByNameIndex(
+      messages,
+      event,
+    );
+    if (syntheticIndex >= 0) return syntheticIndex;
     return -1;
   }
   if (event.status === "running") {

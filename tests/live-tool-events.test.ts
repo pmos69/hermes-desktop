@@ -295,6 +295,46 @@ describe("upsertLiveToolEvent", () => {
     });
   });
 
+  it("matches a stable completion to a synthetic running row by name", () => {
+    const messages: ChatMessage[] = [
+      { id: "u-1", role: "user", content: "run a check" },
+      {
+        id: "tool-call-live-tool:terminal:terminal:1",
+        kind: "tool_call",
+        role: "agent",
+        callId: "live-tool:terminal:terminal:1",
+        name: "terminal",
+        args: "npm test",
+        status: "running",
+      },
+    ];
+
+    const next = upsertLiveToolEvent(messages, {
+      callId: "call-42",
+      hasStableCallId: true,
+      name: "terminal",
+      status: "completed",
+      result: "ok",
+    });
+
+    expect(next.map((m) => m.id)).toEqual([
+      "u-1",
+      "tool-call-live-tool:terminal:terminal:1",
+      "tool-result-call-42",
+    ]);
+    expect(next[1]).toMatchObject({
+      callId: "call-42",
+      name: "terminal",
+      args: "npm test",
+      status: "completed",
+    });
+    expect(next[2]).toMatchObject({
+      kind: "tool_result",
+      callId: "call-42",
+      content: "ok",
+    });
+  });
+
   it("preserves synthetic call ids after completion so later invocations get unique rows", () => {
     const firstRunning = upsertLiveToolEvent(
       [{ id: "u-1", role: "user", content: "make image" }],

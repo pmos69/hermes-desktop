@@ -536,4 +536,83 @@ describe("reconcileStreamedWithDb", () => {
       "a-1",
     ]);
   });
+
+  it("does not drop extra repeated same-name synthetic tools when DB has fewer canonical rows", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("run checks", "u-1"),
+      {
+        id: "tool-call-live-tool:run-1:terminal:1",
+        kind: "tool_call",
+        role: "agent",
+        callId: "live-tool:run-1:terminal:1",
+        name: "terminal",
+        args: "npm test",
+      },
+      {
+        id: "tool-call-live-tool:run-1:terminal:2",
+        kind: "tool_call",
+        role: "agent",
+        callId: "live-tool:run-1:terminal:2",
+        name: "terminal",
+        args: "npm run typecheck",
+      },
+      STREAMED_AGENT("Done.", "a-1"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("run checks", 70),
+      DB_TOOL_CALL("call-terminal-1", "terminal", "npm test", 71),
+      DB_AGENT("Done.", 72),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "u-1",
+      "db-tc-71-call-terminal-1",
+      "a-1",
+      "tool-call-live-tool:run-1:terminal:2",
+    ]);
+    expect(merged[3]).toMatchObject({
+      kind: "tool_call",
+      name: "terminal",
+      args: "npm run typecheck",
+    });
+  });
+
+  it("does not let exact canonical tool matches consume extra synthetic same-name rows", () => {
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("run checks", "u-1"),
+      {
+        id: "tool-call-call-terminal-1",
+        kind: "tool_call",
+        role: "agent",
+        callId: "call-terminal-1",
+        name: "terminal",
+        args: "npm test",
+      },
+      {
+        id: "tool-call-live-tool:run-1:terminal:2",
+        kind: "tool_call",
+        role: "agent",
+        callId: "live-tool:run-1:terminal:2",
+        name: "terminal",
+        args: "npm run typecheck",
+      },
+      STREAMED_AGENT("Done.", "a-1"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("run checks", 80),
+      DB_TOOL_CALL("call-terminal-1", "terminal", "npm test", 81),
+      DB_AGENT("Done.", 82),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual([
+      "u-1",
+      "tool-call-call-terminal-1",
+      "a-1",
+      "tool-call-live-tool:run-1:terminal:2",
+    ]);
+  });
 });
